@@ -1,0 +1,116 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink-950: #05060a;
+  --color-ink-900: #0a0c14;
+  --color-ink-850: #0e111b;
+  --color-ink-800: #121724;
+  --color-ink-700: #1a2033;
+  --color-ink-600: #263049;
+  --color-mist-400: #8b95ad;
+  --color-mist-300: #aeb7cc;
+  --color-mist-200: #d5dbe8;
+  --color-neon-500: #35e0c4;
+  --color-neon-400: #5ff0d8;
+  --color-violet-500: #8b7cff;
+  --color-violet-400: #a99dff;
+  --color-amber-400: #ffc466;
+  --font-sans: ui-sans-serif, -apple-system, "SF Pro Text", "Inter", system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(1200px 700px at 15% -10%, rgba(139, 124, 255, 0.16), transparent 60%),
+    radial-gradient(900px 600px at 90% 0%, rgba(53, 224, 196, 0.1), transparent 55%),
+    var(--color-ink-950);
+  color: var(--color-mist-200);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgba(53, 224, 196, 0.28);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #263049 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #263049;
+  border-radius: 999px;
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition
+    disabled:cursor-not-allowed disabled:opacity-45;
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-white/6 bg-white/[0.025] backdrop-blur-sm;
+  }
+  .card-hover {
+    @apply transition hover:border-white/12 hover:bg-white/[0.045];
+  }
+  .btn-primary {
+    @apply btn bg-neon-500/90 text-ink-950 hover:bg-neon-400 shadow-[0_0_24px_-8px_rgba(53,224,196,0.8)];
+  }
+  .btn-ghost {
+    @apply btn border border-white/8 bg-white/[0.03] text-mist-200 hover:border-white/16 hover:bg-white/[0.06];
+  }
+  .btn-danger {
+    @apply btn border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20;
+  }
+  .input {
+    @apply w-full rounded-xl border border-white/8 bg-ink-900/80 px-3.5 py-2.5 text-sm text-mist-200
+      placeholder:text-mist-400/60 outline-none transition focus:border-neon-500/50 focus:ring-2 focus:ring-neon-500/15;
+  }
+  .label {
+    @apply mb-1.5 block text-xs font-medium uppercase tracking-wider text-mist-400;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.04] px-2.5 py-1 text-xs text-mist-300;
+  }
+  .h1 {
+    @apply text-2xl font-semibold tracking-tight text-white;
+  }
+  .h2 {
+    @apply text-sm font-semibold uppercase tracking-[0.16em] text-mist-400;
+  }
+  .muted {
+    @apply text-sm text-mist-400;
+  }
+}
+
+.node-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(53, 224, 196, 0.35); }
+  70% { box-shadow: 0 0 0 10px rgba(53, 224, 196, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(53, 224, 196, 0); }
+}
+
+.live-dot {
+  animation: pulse-ring 2s infinite;
+}

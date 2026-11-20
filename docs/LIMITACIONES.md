@@ -1,0 +1,81 @@
+# Limitaciones y trabajo pendiente
+
+Este documento es explícito para que no haya funcionalidades declaradas como terminadas sin serlo.
+
+## Limitaciones funcionales
+
+1. **OCR local ausente.** Las páginas escaneadas se envían al modelo de visión (máximo 12 páginas
+   por PDF). Un PDF escaneado de 200 páginas solo interpretará las 12 primeras páginas sin texto.
+   *Mejora posible*: OCR con Vision framework de macOS (gratuito, local) para evitar el envío remoto.
+
+2. **Formatos no soportados.** `.doc` (Word 97-2003), `.xls` antiguos, `.pptx`, `.epub`, vídeo y
+   audio. Se rechazan o se tratan como texto si no son binarios.
+
+3. **Conectores en la nube no implementados.** Google Drive, Gmail, Google Calendar y Notion
+   aparecen en la interfaz marcados como *no configurados*. No hay flujo OAuth. Solo funciona el
+   conector de carpetas locales.
+
+4. **Extracción dependiente del modelo.** Puede producir conceptos redundantes
+   ("Fase 2" vs "Fase 2 del Proyecto Aurora") o asignar tipos discutibles. Se mitiga con
+   `dedupeNodes()` y con la validación manual de relaciones pendientes, pero no es perfecto.
+
+5. **Sin edición de fragmentos.** Se puede editar un nodo (nombre, tipo, descripción) y confirmar
+   o descartar relaciones, pero no editar el texto de un fragmento ni su página.
+
+6. **Sin búsqueda por similitud entre documentos** más allá del grafo: no hay vista de
+   "documentos relacionados" explícita (se puede inferir por nodos compartidos).
+
+7. **Una sola persona.** No hay usuarios, roles ni autenticación. El servidor escucha en
+   `127.0.0.1` y asume un único usuario local.
+
+8. **Chat sin streaming token a token.** La respuesta llega completa tras el razonamiento.
+   La interfaz muestra un indicador de progreso. *Mejora posible*: SSE.
+
+## Limitaciones técnicas
+
+9. **Cola secuencial.** Se procesa un documento a la vez (la concurrencia configurable limita las
+   llamadas a NVIDIA dentro de un documento). Es deliberado por RAM y cuotas; procesar 100 PDFs
+   grandes lleva tiempo.
+
+10. **Búsqueda vectorial en memoria.** Cada consulta recorre todos los embeddings (coseno en JS).
+    Con decenas de miles de fragmentos empezará a notarse. *Mejora posible*: índice HNSW o
+    `sqlite-vec`.
+
+11. **Sin caché de respuestas del modelo.** Reprocesar un documento vuelve a consumir cuota.
+
+12. **Coste cero condicionado.** El software es gratuito, pero NVIDIA Build aplica límites de uso.
+    Si la cuenta agota cuota, aparecerá un error 429 controlado y la app seguirá funcionando en
+    modo local (FTS5 sin extracción nueva).
+
+13. **Dependencia de `@napi-rs/canvas`** para renderizar PDFs escaneados e imágenes. Si el binario
+    precompilado no estuviera disponible para una arquitectura, el renderizado se omite con un aviso
+    y el resto de la app sigue operativa.
+
+14. **La app no está firmada ni notarizada.** Es un bundle `.app` con un script lanzador que arranca
+    `next start` y abre el navegador. Gatekeeper podría pedir confirmación la primera vez.
+    *Mejora posible*: empaquetar con Tauri (requiere toolchain Rust).
+
+15. **Puerto fijo 4317.** Si está ocupado, el arranque falla. Se puede cambiar con `--port`.
+
+## Seguridad: riesgos residuales
+
+16. **Contenido remoto.** Todo documento procesado con IA (texto, imágenes) sale del equipo hacia
+    NVIDIA. Está avisado en la interfaz y se puede desactivar globalmente o por documento, pero el
+    usuario debe decidirlo conscientemente.
+
+17. **Inyección de prompts.** Se instruye al modelo para tratar el contenido como datos y no como
+    instrucciones; no es una garantía absoluta frente a documentos adversariales.
+
+18. **Clave en el Llavero.** Se pasa a `security` por argumento al guardarla (visible un instante en
+    la lista de procesos). Es el mecanismo estándar de macOS, pero no es perfecto.
+
+19. **Sin cifrado en reposo** de la base de datos ni de los archivos (FileVault cubre el disco).
+
+## Pendiente sugerido (orden de valor)
+
+1. OCR local con Vision framework para PDFs escaneados.
+2. Conector de Google Drive con OAuth de solo lectura.
+3. Streaming del chat (SSE) y cancelación de respuestas.
+4. Índice vectorial aproximado (`sqlite-vec`) para >50k fragmentos.
+5. Empaquetado Tauri firmado.
+6. Detección de contradicciones entre documentos.
