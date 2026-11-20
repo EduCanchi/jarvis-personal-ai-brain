@@ -112,7 +112,7 @@ export default function ConexionesPage() {
         <div className="flex flex-wrap gap-2">
           <input
             className="input flex-1 min-w-[260px] font-mono text-xs"
-            placeholder="/Users/usuario/Documentos/Proyectos"
+            placeholder="/Users/tu-usuario/Documentos/Proyectos"
             value={folder}
             onChange={(e) => setFolder(e.target.value)}
           />

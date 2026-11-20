@@ -40,7 +40,7 @@ No se instala Docker, PostgreSQL, Redis ni Neo4j. No se descargan modelos de 120
 ## 2. Instalación
 
 ```bash
-cd /Users/usuario/Jarvis
+cd ~/Jarvis
 bash scripts/install.sh
 ```
 

@@ -35,7 +35,7 @@ STAMP="$(date +%s)"
 printf 'Informe de prueba %s\n\nEl Proyecto Helios esta liderado por Ana Torres en la organizacion Vega Systems.\nEl presupuesto aprobado es de 50.000 euros y la entrega sera en marzo de 2027.\n' "$STAMP" > "$TMP/informe-$STAMP.txt"
 cupsfilter "$TMP/informe-$STAMP.txt" > "$TMP/informe-$STAMP.pdf" 2>/dev/null || cp "$TMP/informe-$STAMP.txt" "$TMP/informe-$STAMP.pdf"
 
-cd /Users/usuario/Jarvis
+cd "$(dirname "$0")/.."
 node --input-type=module -e "
 import { createCanvas } from '@napi-rs/canvas';
 import fs from 'node:fs';

@@ -98,7 +98,7 @@ En **Memoria**:
 
 ## 7. Conexiones
 
-- **Carpetas locales**: escribe una ruta (por ejemplo `/Users/usuario/Documentos/Proyectos`) y pulsa
+- **Carpetas locales**: escribe una ruta (por ejemplo `~/Documentos/Proyectos`) y pulsa
   *Conectar carpeta*. Luego *Sincronizar* para importar los archivos nuevos.
   Nunca se modifican ni se borran tus archivos.
 - **Google Drive / Gmail / Calendar / Notion**: no están disponibles todavía; requieren
