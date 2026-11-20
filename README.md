@@ -11,7 +11,7 @@ con fuentes verificables y sin suscripciones.
 ### Fase JARVIS (voz, herramientas y móvil)
 
 El proyecto evoluciona a un asistente personal: conversación por voz en español (whisper.cpp local +
-voces de macOS), personalidad JARVIS, 14 herramientas con permisos y confirmación, creación real de
+voces de macOS), personalidad JARVIS, 15 herramientas con permisos y confirmación, creación real de
 PowerPoint/Excel/Word/PDF, automatizaciones programadas, notificaciones y PWA para iPhone con acceso
 autenticado. Guía completa: [`docs/JARVIS.md`](docs/JARVIS.md).
 

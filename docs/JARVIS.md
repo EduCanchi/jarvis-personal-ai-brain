@@ -15,7 +15,7 @@ de datos.
 | Texto → voz | Voces nativas de macOS (`say` + AAC), seleccionables | ✅ audio generado y reproducido |
 | Conversación | Push-to-talk, VAD, manos libres, palabra de activación, interrupción | ✅ lógica y endpoints; micrófono real pendiente de permiso del usuario |
 | Personalidad | JARVIS en español, breve, honesto, sin afirmar acciones no ejecutadas | ✅ |
-| Herramientas | 14 herramientas con permisos, riesgo, confirmación y registro | ✅ |
+| Herramientas | 15 herramientas con permisos, riesgo, confirmación y registro | ✅ |
 | Documentos | PPTX, XLSX, DOCX, PDF, Mermaid | ✅ archivos válidos abiertos y comprobados |
 | Apple | Calendario, Recordatorios, Notas, notificaciones | ⚠️ implementado; requiere permiso de Automatización del usuario |
 | Automatizaciones | Motor programado + creación por lenguaje natural | ✅ creada y ejecutada |
