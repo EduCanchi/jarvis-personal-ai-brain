@@ -448,9 +448,18 @@ export default function ConfiguracionPage() {
             <div className="font-mono text-[10px]">estado: {voz?.stt?.cargado ? "cargado en memoria" : "en espera (se carga al hablar)"}</div>
           </div>
         </div>
-        <p className="mt-3 text-[11px] text-mist-400">
-          Reconocimiento local con whisper.cpp (español). Síntesis con las voces nativas de macOS. Ningún audio sale del
-          Mac salvo el texto que se envía a NVIDIA para razonar.
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <a href="/voces" className="btn-ghost text-xs">
+            Comparar y elegir voces
+          </a>
+          <span className="text-[11px] text-mist-400">
+            Motor actual: {local.motor_voz_es ?? "kokoro"} · {local.voz_es ?? "em_alex"} (es) · {local.motor_voz_en ?? "kokoro"} ·{" "}
+            {local.voz_en ?? "bm_george"} (en)
+          </span>
+        </div>
+        <p className="mt-2 text-[11px] text-mist-400">
+          Reconocimiento local con whisper.cpp (español). Síntesis local con Kokoro o Piper (JARVIS); las voces de macOS
+          quedan como respaldo. Ningún audio sale del Mac salvo el texto que se envía a NVIDIA para razonar.
         </p>
       </section>
 

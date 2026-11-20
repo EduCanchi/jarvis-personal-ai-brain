@@ -98,6 +98,9 @@ export default function AsistentePage() {
 
   useEffect(() => {
     if (!voice) return;
+    if (voice.auto_tts) {
+      fetch("/api/voice/warm", { method: "POST" }).catch(() => {});
+    }
     setManosLibres(voice.manos_libres);
     setAutoTts(voice.auto_tts);
     setVoz(voice.voz_actual);
@@ -577,20 +580,12 @@ export default function AsistentePage() {
           <div className="mt-3 w-full space-y-2 text-[11px]">
             <div>
               <label className="label mb-1">Voz</label>
-              <select
-                className="input py-1.5 text-xs"
-                value={voz}
-                onChange={(e) => {
-                  setVoz(e.target.value);
-                  void saveSetting({ voz_tts: e.target.value });
-                }}
-              >
-                {(voice?.voces ?? []).map((v) => (
-                  <option key={`${v.nombre}-${v.idioma}`} value={v.nombre}>
-                    {v.nombre} ({v.idioma})
-                  </option>
-                ))}
-              </select>
+              <a href="/voces" className="input flex items-center justify-between py-1.5 text-xs">
+                <span className="truncate">
+                  {(voice as any)?.voz_es ?? "em_alex"} · {(voice as any)?.motor_voz_es ?? "kokoro"}
+                </span>
+                <span className="text-neon-400">cambiar</span>
+              </a>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-16 text-mist-400">Velocidad</span>

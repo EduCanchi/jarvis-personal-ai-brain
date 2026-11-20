@@ -244,6 +244,10 @@ function seedSettings(conn: DatabaseSync) {
     auto_tts: "true",
     modelo_stt_ruta: "",
     modelo_voz: "nvidia/nemotron-3.5-lightning-30b-a3b",
+    motor_voz_es: "kokoro",
+    voz_es: "em_alex",
+    motor_voz_en: "kokoro",
+    voz_en: "bm_george",
   };
   const stmt = conn.prepare("INSERT OR IGNORE INTO settings(key, value) VALUES(?, ?)");
   for (const [k, v] of Object.entries(defaults)) stmt.run(k, v);

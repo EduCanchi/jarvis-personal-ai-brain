@@ -24,6 +24,10 @@ export async function GET() {
       palabra_activacion: getSetting("palabra_activacion", "jarvis"),
       manos_libres: getSetting("modo_manos_libres", "false") === "true",
       auto_tts: getSetting("auto_tts", "true") === "true",
+      motor_voz_es: getSetting("motor_voz_es", "kokoro"),
+      voz_es: getSetting("voz_es", "em_alex"),
+      motor_voz_en: getSetting("motor_voz_en", "kokoro"),
+      voz_en: getSetting("voz_en", "bm_george"),
     });
   } catch (err) {
     return handleError(err);

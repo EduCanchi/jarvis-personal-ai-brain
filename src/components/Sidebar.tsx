@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 const NAV = [
   { href: "/", label: "Dashboard", icon: "grid" },
   { href: "/asistente", label: "JARVIS", icon: "voice" },
+  { href: "/voces", label: "Voces", icon: "wave" },
   { href: "/cerebro", label: "Cerebro visual", icon: "brain" },
   { href: "/chat", label: "Chat IA", icon: "chat" },
   { href: "/biblioteca", label: "Biblioteca", icon: "book" },
@@ -81,6 +82,12 @@ function Icon({ name, className = "h-[18px] w-[18px]" }: { name: string; classNa
         <svg {...common}>
           <rect x="9" y="3" width="6" height="11" rx="3" />
           <path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8" />
+        </svg>
+      );
+    case "wave":
+      return (
+        <svg {...common}>
+          <path d="M3 12h2l2-6 3 14 3-18 3 14 2-4h3" />
         </svg>
       );
     case "tool":

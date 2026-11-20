@@ -12,7 +12,7 @@ de datos.
 | Área | Implementado | Verificado en este Mac |
 | --- | --- | --- |
 | Voz → texto | whisper.cpp (`whisper-server`, modelo `ggml-small`, español) | ✅ audio real transcrito |
-| Texto → voz | Voces nativas de macOS (`say` + AAC), seleccionables | ✅ audio generado y reproducido |
+| Texto → voz | Kokoro (español/inglés) + Piper JARVIS (inglés), con `say` como respaldo | ✅ audio generado, transcrito y medido |
 | Conversación | Push-to-talk, VAD, manos libres, palabra de activación, interrupción | ✅ lógica y endpoints; micrófono real pendiente de permiso del usuario |
 | Personalidad | JARVIS en español, breve, honesto, sin afirmar acciones no ejecutadas | ✅ |
 | Herramientas | 15 herramientas con permisos, riesgo, confirmación y registro | ✅ |
@@ -42,9 +42,10 @@ de datos.
   `~/Library/Application Support/PersonalAIBrain/models/ggml-small.bin`.
   Se arranca al primer uso, se reutiliza entre peticiones y **se apaga tras 10 minutos sin uso**
   para liberar ~740 MB de RAM.
-- **TTS**: `/usr/bin/say` con voces `es_ES`/`es_MX` (Mónica, Paulina…), convertido a AAC con
-  `afconvert` y cacheado por hash de texto+voz+velocidad. Se sintetiza **por frases** para que el
-  primer audio llegue antes.
+- **TTS**: motor local persistente (`scripts/voice_worker.py`) con **Kokoro** para español
+  (`em_alex`) e inglés (`bm_george`) y **Piper JARVIS** (`jarvis-high`) como alternativa en inglés.
+  Detecta el idioma del texto, cachea por hash y sintetiza **por frases**. `say` queda como respaldo.
+  Detalle y evidencias: [`VOCES.md`](VOCES.md).
 - **Anti-eco**: mientras se reproduce audio no se graba; en manos libres se reanuda 500 ms después.
 - **Permisos**: el navegador pide micrófono la primera vez. Si se deniega, la app explica cómo
   activarlo en Ajustes del Sistema.
@@ -55,8 +56,8 @@ de datos.
 | --- | --- |
 | Transcripción (audio de 5 s) | **0,9 – 2,0 s** |
 | Respuesta del asistente (modelo de voz) | **0,7 – 1,3 s** |
-| Primera frase sintetizada | **1,3 – 1,9 s** |
-| **Hasta el primer audio** | **≈ 4,0 s** |
+| Primera frase sintetizada (Kokoro, caliente) | **0,9 – 1,7 s** |
+| **Hasta el primer audio** | **≈ 3,3 – 5,0 s** |
 
 En frío (primer uso tras arrancar, o ráfaga de peticiones) puede llegar a 15–20 s.
 **No es una conversación en tiempo real**: es una conversación por turnos con ~4 s de latencia.
@@ -174,16 +175,18 @@ programados solo se ejecutan con el Mac encendido (puedes impedir la suspensión
 | --- | --- |
 | Servidor Next.js | 110–150 MB |
 | `whisper-server` cargado | ~740 MB |
+| Motor de voz cargado (Kokoro o Piper) | ~620 MB |
 | `say` (pico puntual) | < 100 MB |
 | **Total en conversación** | **~0,9 GB** |
 
-`whisper-server` se descarga solo tras 10 min de inactividad y al detener la app. No hay modelos
-locales de lenguaje ni de embeddings.
+`whisper-server` y el motor de voz se descargan solos tras 10 min de inactividad y al detener la app.
+Solo hay un motor de voz cargado a la vez. No hay modelos locales de lenguaje ni de embeddings.
 
 ---
 
 ## 8. Pendiente y no verificado
 
+- **Voz JARVIS de Piper en español**: no funciona (fonemizador inglés). Solo se ofrece para inglés.
 - **Canva**: sin integración. No se declara conectado.
 - **Google Drive / Gmail / Calendar / Notion**: siguen sin OAuth.
 - **Micrófono real y altavoces**: la ruta completa se ha probado con audio generado por el sistema;

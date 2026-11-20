@@ -35,6 +35,9 @@ npm install --no-audit --no-fund
 echo "==> Compilando la aplicación"
 npm run build
 
+echo "==> Instalando motor de voz local (Kokoro + Piper JARVIS)"
+bash scripts/install-voices.sh || echo "Aviso: no se pudo instalar el motor de voz; la app usará las voces de macOS."
+
 echo "==> Preparando lanzador para el Dock"
 bash scripts/make-app.sh
 

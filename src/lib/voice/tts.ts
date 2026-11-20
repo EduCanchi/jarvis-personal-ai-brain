@@ -6,6 +6,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { cacheDir } from "../paths";
 import { getSetting } from "../db";
+import { resolveVoice, synthLocal } from "./engines";
 
 const run = promisify(execFile);
 
@@ -46,14 +47,28 @@ function cachePath(text: string, voice: string, rate: number): string {
   return path.join(cacheDir(), "tts", `${hash}.m4a`);
 }
 
-export async function synthesize(text: string, opts?: { voice?: string; rate?: number }): Promise<{ file: string; ms: number; cached: boolean }> {
+export async function synthesize(
+  text: string,
+  opts?: { voice?: string; rate?: number; motor?: "kokoro" | "piper" | "apple"; voz?: string; idioma?: "es" | "en" },
+): Promise<{ file: string; ms: number; cached: boolean; mime: string }> {
   const clean = text.replace(/\s+/g, " ").trim().slice(0, 1200);
   if (!clean) throw new Error("Texto vacío para síntesis");
-  const voice = opts?.voice ?? currentVoice();
   const rate = opts?.rate ?? currentRate();
+
+  const resolved = resolveVoice(clean);
+  const motor = opts?.motor ?? resolved.motor;
+  const idioma = opts?.idioma ?? resolved.idioma;
+
+  if (motor !== "apple") {
+    const voz = opts?.voz ?? resolved.voz;
+    const result = await synthLocal({ text: clean, motor, voz, idioma, velocidad: rate / 185 });
+    return { file: result.file, ms: result.ms, cached: result.cached, mime: result.mime };
+  }
+
+  const voice = opts?.voice ?? currentVoice();
   const out = cachePath(clean, voice, rate);
   await fsp.mkdir(path.dirname(out), { recursive: true });
-  if (fs.existsSync(out)) return { file: out, ms: 0, cached: true };
+  if (fs.existsSync(out)) return { file: out, ms: 0, cached: true, mime: "audio/mp4" };
 
   const started = Date.now();
   const aiff = `${out}.${process.pid}.aiff`;
@@ -63,11 +78,11 @@ export async function synthesize(text: string, opts?: { voice?: string; rate?: n
   } finally {
     fs.rmSync(aiff, { force: true });
   }
-  return { file: out, ms: Date.now() - started, cached: false };
+  return { file: out, ms: Date.now() - started, cached: false, mime: "audio/mp4" };
 }
 
 /** Divide en fragmentos hablables para reducir el tiempo hasta el primer audio. */
-export function speechSegments(text: string, maxLen = 220): string[] {
+export function speechSegments(text: string, maxLen = 120): string[] {
   const clean = text
     .replace(/```[\s\S]*?```/g, " (bloque de código omitido) ")
     .replace(/[*_#>`]/g, " ")

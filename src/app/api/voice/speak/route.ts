@@ -8,16 +8,30 @@ export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
-    const body = await readJson<{ text?: string; voice?: string; rate?: number; segments?: boolean }>(req);
+    const body = await readJson<{
+      text?: string;
+      voice?: string;
+      rate?: number;
+      segments?: boolean;
+      motor?: "kokoro" | "piper" | "apple";
+      voz?: string;
+      idioma?: "es" | "en";
+    }>(req);
     const text = requireString(body.text, "text", 4000);
     if (body.segments) {
       return ok({ segments: speechSegments(text) });
     }
-    const result = await synthesize(text, { voice: body.voice, rate: body.rate });
+    const result = await synthesize(text, {
+      voice: body.voice,
+      rate: body.rate,
+      motor: body.motor,
+      voz: body.voz,
+      idioma: body.idioma,
+    });
     const data = await fs.readFile(result.file);
     return new Response(new Uint8Array(data), {
       headers: {
-        "Content-Type": "audio/mp4",
+        "Content-Type": result.mime,
         "Content-Length": String(data.length),
         "Cache-Control": "private, max-age=3600",
         "X-Sintesis-Ms": String(result.ms),

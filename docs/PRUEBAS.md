@@ -237,3 +237,35 @@ automatización creada, token, etc.). Sin errores de consola de la aplicación.
 - Permisos de Automatización de macOS (Calendario/Recordatorios/Notas): scripts listos, sin aceptar.
 - iPhone físico, notificaciones ntfy/Telegram (requieren credenciales del usuario).
 - Canva: no implementado.
+
+
+---
+
+# Voces — evidencias de la investigación
+
+## H. Prueba de inteligibilidad (voz → whisper → texto)
+
+| Voz | Texto original | Transcripción | Veredicto |
+| --- | --- | --- | --- |
+| Kokoro `em_alex` (es) | “Buenas noches. Todos los sistemas están operativos…” | idéntica | ✅ |
+| Kokoro `bm_george` (en-GB) | “Good evening. All systems are operational…” | idéntica | ✅ |
+| Piper `jarvis-high` (en-GB) | “Good evening. All systems are operational…” | “Both systems…” | ✅ (1 palabra) |
+| Piper `jarvis-high` en español | “Buenas noches. Todos los sistemas están operativos…” | “UNAS Notches… preparados en 4” | ❌ |
+
+## I. Latencia y memoria
+
+| Motor | Frase corta (caliente) | RAM cargado | Modelo |
+| --- | --- | --- | --- |
+| Kokoro | 0,9 – 1,7 s | ~620 MB | 310 MB |
+| Piper JARVIS | 1,5 – 1,7 s | ~540 MB | 109 MB |
+| macOS `say` | 1,3 – 1,9 s | < 100 MB | sistema |
+
+Cadena completa medida con `scripts/voice-e2e.sh`: STT 0,78 s · asistente 2,1 s · TTS 0,26 s
+(cacheado) → **3,3 s hasta el primer audio**.
+
+## J. Incidencias corregidas durante la integración
+
+- `HTTPServer.server_bind()` de Python resolvía el nombre inverso de 127.0.0.1 y bloqueaba el
+  arranque **35 s** en macOS. Se sustituyó por un bind directo: arranque en **0,25 s**.
+- Kokoro rechazaba `lang="en"`; se mapea a `en-gb`.
+- Al cambiar de motor se descarga el anterior para no sumar 1,2 GB de RAM.

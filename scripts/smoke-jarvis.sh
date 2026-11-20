@@ -21,6 +21,7 @@ echo "[1] Estado"
 check "health responde" 'curl -s -m 10 "$URL/api/health" | grep -q "\"ok\":true"'
 VOZ="$(curl -s -m 20 "$URL/api/voice/transcribe")"
 check "whisper.cpp disponible" 'echo "$VOZ" | grep -q "\"disponible\":true"'
+curl -s -m 120 -X POST "$URL/api/voice/warm" >/dev/null 2>&1 || true
 check "voces en español detectadas" 'echo "$VOZ" | python3 -c "import sys,json;d=json.load(sys.stdin);sys.exit(0 if any(v[\"idioma\"].startswith(\"es\") for v in d[\"voces\"]) else 1)"'
 
 echo "[2] Voz"

@@ -22,6 +22,7 @@ echo "[0] Calentamiento (carga de whisper y conexiones)"
 curl -s -m 120 -X POST "$URL/api/voice/transcribe" -F "audio=@$TMP/entrada.wav" >/dev/null
 curl -s -m 120 -X POST "$URL/api/assistant" -H "Content-Type: application/json" \
   -d '{"question":"Hola","origin":"voz"}' >/dev/null
+curl -s -m 120 -X POST "$URL/api/voice/warm" >/dev/null
 sleep 1
 
 echo "[1] STT (whisper.cpp)"

@@ -108,3 +108,21 @@ Este documento es explícito para que no haya funcionalidades declaradas como te
     cada 60 s, por lo que la precisión es de ±1 minuto.
 30. **Herramientas de creación** generan contenido a partir de lo que pide el usuario o de la
     memoria; no validan cifras ni hechos. Los archivos son plantillas sobrias, no diseño avanzado.
+
+
+---
+
+# Voces — limitaciones
+
+31. **La voz JARVIS de Piper es solo inglesa.** Su fonemizador está fijado a `en-gb-x-rp`; en español
+    resulta ininteligible. Se ofrece únicamente para inglés.
+32. **Kokoro no es una voz “JARVIS”.** Es una voz masculina británica/española natural y con licencia
+    Apache-2.0, pero no imita al personaje. La imitación más cercana sigue siendo Piper en inglés.
+33. **Coste de RAM del motor de voz**: ~620 MB mientras está cargado. Se libera a los 10 min de
+    inactividad y al cerrar la app; la primera frase tras arrancar tarda ~2–4 s más.
+34. **La primera reproducción tras abrir la app** puede tardar 2–4 s (carga del modelo). La pantalla de
+    JARVIS lo precarga en segundo plano.
+35. **El timbre de las voces de Kokoro** procede de voces donadas/derivadas; para uso comercial hay que
+    revisar la procedencia de cada voz, aunque el modelo sea Apache-2.0.
+36. **Voces personalizadas**: se aceptan modelos Piper ONNX; no hay interfaz para entrenar voces dentro
+    de la app. VoiceStudio no está incluido.
