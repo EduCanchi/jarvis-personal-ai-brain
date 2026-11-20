@@ -228,6 +228,11 @@ function GraphInner({
 export default function CerebroPage() {
   const { data, loading, reload } = useApi<GraphData>("/api/graph", 0);
   const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    const initial = new URLSearchParams(window.location.search).get("q");
+    if (initial) setQuery(initial);
+  }, []);
   const [typeFilter, setTypeFilter] = useState("todos");
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<any>(null);

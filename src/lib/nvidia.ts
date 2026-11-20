@@ -212,6 +212,31 @@ export async function listModels(): Promise<{ id: string; owned_by?: string }[]>
   return data?.data ?? [];
 }
 
+/** Extrae el primer objeto JSON completo respetando cadenas y anidamiento. */
+export function extractFirstJson(text: string): any {
+  const start = text.indexOf("{");
+  if (start < 0) throw new Error("No hay JSON en la respuesta");
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return JSON.parse(text.slice(start, i + 1));
+    }
+  }
+  throw new Error("JSON incompleto en la respuesta");
+}
+
 /** Extrae JSON aunque el modelo lo envuelva en texto o bloques markdown. */
 export function parseJsonLoose<T = unknown>(text: string): T {
   const trimmed = text.trim();

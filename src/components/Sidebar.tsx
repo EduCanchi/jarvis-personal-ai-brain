@@ -6,10 +6,13 @@ import { useEffect, useState } from "react";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: "grid" },
+  { href: "/asistente", label: "JARVIS", icon: "voice" },
   { href: "/cerebro", label: "Cerebro visual", icon: "brain" },
   { href: "/chat", label: "Chat IA", icon: "chat" },
   { href: "/biblioteca", label: "Biblioteca", icon: "book" },
   { href: "/memoria", label: "Memoria", icon: "memory" },
+  { href: "/herramientas", label: "Herramientas", icon: "tool" },
+  { href: "/automatizaciones", label: "Automatizaciones", icon: "clock" },
   { href: "/conexiones", label: "Conexiones", icon: "plug" },
   { href: "/configuracion", label: "Configuración", icon: "gear" },
 ];
@@ -73,6 +76,26 @@ function Icon({ name, className = "h-[18px] w-[18px]" }: { name: string; classNa
           <path d="M12 18v3" />
         </svg>
       );
+    case "voice":
+      return (
+        <svg {...common}>
+          <rect x="9" y="3" width="6" height="11" rx="3" />
+          <path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8" />
+        </svg>
+      );
+    case "tool":
+      return (
+        <svg {...common}>
+          <path d="M14.7 6.3a4 4 0 0 0 5 5L21 21H3l8.7-8.7a4 4 0 0 0 5-5l-2.6 2.6-2.4-2.4 2.6-2.6Z" />
+        </svg>
+      );
+    case "clock":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7v5l3 2" />
+        </svg>
+      );
     case "gear":
       return (
         <svg {...common}>
@@ -111,7 +134,7 @@ export function Sidebar() {
   }, []);
 
   return (
-    <aside className="flex w-[248px] shrink-0 flex-col border-r border-white/6 bg-ink-900/60 px-3.5 py-5 backdrop-blur-xl">
+    <aside className="hidden w-[248px] shrink-0 flex-col border-r border-white/6 bg-ink-900/60 px-3.5 py-5 backdrop-blur-xl lg:flex">
       <Link href="/" className="mb-8 flex items-center gap-3 px-2">
         <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-neon-500/25 to-violet-500/25 ring-1 ring-white/10">
           <svg viewBox="0 0 24 24" className="h-5 w-5 text-neon-400" fill="none" stroke="currentColor" strokeWidth="1.6">

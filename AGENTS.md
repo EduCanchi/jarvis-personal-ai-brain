@@ -20,6 +20,8 @@ No hay base de datos externa ni Docker.
 - `npm run typecheck` — TypeScript
 - `npm test` — pruebas unitarias (`node --import tsx --test tests/*.test.ts`)
 - `bash scripts/smoke.sh [--restauracion]` — integración real contra el servidor en marcha
+- `bash scripts/smoke-jarvis.sh [--notificar]` — voz, herramientas, permisos y acceso remoto
+- `bash scripts/voice-e2e.sh "frase"` — cadena STT → asistente → TTS con audio real
 - `bash scripts/install.sh` — instalación completa + lanzador `.app`
 
 ### Convenciones

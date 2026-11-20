@@ -26,6 +26,12 @@ export function backupsDir(): string {
   return dir;
 }
 
+export function artifactsDir(): string {
+  const dir = path.join(dataDir(), "artifacts");
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
 export function dbPath(): string {
   return path.join(dataDir(), "brain.db");
 }

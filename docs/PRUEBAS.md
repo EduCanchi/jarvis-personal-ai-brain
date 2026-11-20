@@ -163,3 +163,77 @@ Renderizado verificado con Chromium headless sobre las 7 secciones:
 - Uso concurrente desde varios navegadores (aplicación personal).
 - macOS 13/14 (probado en macOS 27).
 - Cortes de red durante la extracción (hay reintentos, pero no se ha simulado un corte largo).
+
+---
+
+# Ampliación JARVIS — evidencias
+
+Ejecutado el **19/11/2026** en el mismo equipo (MacBook Air M4, 16 GB, macOS 27.0.1, Node 26.13.0).
+
+## A. Resumen
+
+| Prueba | Resultado |
+| --- | --- |
+| Typecheck / build | ✅ 0 errores |
+| Unitarias (17) | ✅ 17/17 |
+| `scripts/smoke-jarvis.sh` | ✅ 17/17 |
+| `scripts/voice-e2e.sh` (audio real generado) | ✅ transcripción exacta + respuesta + audio |
+| Modelos de voz y herramientas | ✅ verificados con archivos reales |
+| Acceso remoto con token | ✅ 401 sin token, 200 con token y cookie |
+| Automatización programada | ✅ creada por lenguaje natural y ejecutada |
+
+## B. Voz (mediciones en caliente)
+
+| Etapa | Medición |
+| --- | --- |
+| STT whisper.cpp (audio 5 s, español) | 0,89 – 2,02 s (frío: 3,5 – 6,4 s) |
+| Asistente modo voz (lightning 30B) | 0,71 – 1,33 s |
+| TTS primera frase (`say` + AAC) | 1,34 – 1,93 s (cacheado: 0 s) |
+| **Hasta el primer audio** | **3,98 s** (peor caso observado: 23 s en frío) |
+
+Transcripción literal obtenida:
+`"¿Yarvis, quién lidera el proyecto aurora y qué presupuesto tiene?"`
+→ respuesta: “Marta Ruiz es la directora del proyecto Aurora. El presupuesto total es de 120.000 euros.”
+
+RAM: `whisper-server` 739 MB cargado (se libera a los 10 min de inactividad), servidor 113 MB.
+
+## C. Herramientas (archivos reales comprobados)
+
+| Herramienta | Artefacto | Verificación |
+| --- | --- | --- |
+| `crear_presentacion` | `Mis vacaciones en la costa.pptx` (75 KB) | ZIP válido, 5 diapositivas, texto correcto |
+| `crear_excel` | `gastos-marzo.xlsx` (6,7 KB) | `xl/workbook.xml` y cadenas correctas |
+| `crear_word` | `carta.docx` (9,6 KB) | texto extraído del `document.xml` |
+| `crear_pdf` | `informe.pdf` (1,6 KB) | `file`: PDF 1.3, 1 página |
+| `crear_diagrama` | `flujo.mmd` | código Mermaid válido |
+| `crear_recordatorio` | — | devuelve `requiere_confirmacion: true` sin ejecutar |
+| `enviar_notificacion` | — | notificación local de macOS enviada (`status: enviada`) |
+
+## D. Automatización
+
+Petición: “Todos los lunes a las 9 prepárame un resumen de lo que sé sobre el Proyecto Aurora”.
+Resultado: `{"tipo":"semanal","dia":1,"hora":"09:00"}`, próxima ejecución calculada, ejecución
+manual en 7,7 s con notificación real enviada.
+
+## E. Acceso remoto
+
+| Petición | Resultado |
+| --- | --- |
+| `Host: mac.tailnet.ts.net` + `/api/health` | 401 `requiere_auth` |
+| Página `/asistente` remota | 307 → `/login?next=/asistente` |
+| Login con token | cookie `paib_session` httpOnly |
+| Petición con cookie o `x-paib-token` | 200 |
+| `POST /api/shortcuts/run` con token | texto plano de respuesta |
+
+## F. Interfaz
+
+Renderizado con Chromium headless: `/asistente`, `/herramientas`, `/automatizaciones`,
+`/configuracion` y `/login` devuelven 200 y muestran sus datos (herramientas, artefactos,
+automatización creada, token, etc.). Sin errores de consola de la aplicación.
+
+## G. No verificado en dispositivo real
+
+- Micrófono y altavoces del Mac con la interfaz (sí la ruta completa con audio generado).
+- Permisos de Automatización de macOS (Calendario/Recordatorios/Notas): scripts listos, sin aceptar.
+- iPhone físico, notificaciones ntfy/Telegram (requieren credenciales del usuario).
+- Canva: no implementado.

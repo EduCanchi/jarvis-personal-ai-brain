@@ -130,6 +130,60 @@ CREATE TABLE IF NOT EXISTS events (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS tool_runs (
+  id TEXT PRIMARY KEY,
+  tool TEXT NOT NULL,
+  args TEXT,
+  result TEXT,
+  status TEXT NOT NULL DEFAULT 'ok',
+  error TEXT,
+  origin TEXT NOT NULL DEFAULT 'texto',
+  duration_ms INTEGER,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tool_runs_created ON tool_runs(created_at);
+
+CREATE TABLE IF NOT EXISTS artifacts (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  mime TEXT NOT NULL,
+  path TEXT NOT NULL,
+  size INTEGER NOT NULL DEFAULT 0,
+  tool TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS automations (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  prompt TEXT NOT NULL,
+  schedule TEXT NOT NULL,
+  next_run TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  last_run TEXT,
+  last_result TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS notes (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  tags TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id TEXT PRIMARY KEY,
+  channel TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT,
+  status TEXT NOT NULL,
+  error TEXT,
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS connectors (
   id TEXT PRIMARY KEY,
   kind TEXT NOT NULL,
@@ -149,10 +203,19 @@ export function db(): DatabaseSync {
     conn.exec("PRAGMA foreign_keys = ON");
     conn.exec("PRAGMA busy_timeout = 5000");
     conn.exec(SCHEMA);
+    ensureColumn(conn, "tool_runs", "conversation_id", "TEXT");
+    ensureColumn(conn, "messages", "meta", "TEXT");
     globalForDb.__paibDb = conn;
     seedSettings(conn);
   }
   return globalForDb.__paibDb;
+}
+
+function ensureColumn(conn: DatabaseSync, table: string, column: string, type: string) {
+  const cols = conn.prepare(`PRAGMA table_info(${table})`).all() as Row[];
+  if (!cols.some((c) => c.name === column)) {
+    conn.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
 }
 
 function seedSettings(conn: DatabaseSync) {
@@ -169,6 +232,18 @@ function seedSettings(conn: DatabaseSync) {
     procesamiento_remoto: "true",
     retencion_dias: "0",
     tema: "oscuro",
+    voz_tts: "Mónica",
+    voz_velocidad: "185",
+    voz_volumen: "0.9",
+    palabra_activacion: "jarvis",
+    modo_manos_libres: "false",
+    canal_notificaciones: "local",
+    ntfy_topic: "",
+    telegram_token: "",
+    telegram_chat_id: "",
+    auto_tts: "true",
+    modelo_stt_ruta: "",
+    modelo_voz: "nvidia/nemotron-3.5-lightning-30b-a3b",
   };
   const stmt = conn.prepare("INSERT OR IGNORE INTO settings(key, value) VALUES(?, ?)");
   for (const [k, v] of Object.entries(defaults)) stmt.run(k, v);

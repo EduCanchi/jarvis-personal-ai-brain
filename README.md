@@ -8,6 +8,18 @@ con fuentes verificables y sin suscripciones.
 - **Modelos en NVIDIA Build**: razonamiento, visión y embeddings vía API (el contenido procesado sale de tu equipo).
 - **Cero coste obligatorio**: todo el software es gratuito y de código abierto.
 
+### Fase JARVIS (voz, herramientas y móvil)
+
+El proyecto evoluciona a un asistente personal: conversación por voz en español (whisper.cpp local +
+voces de macOS), personalidad JARVIS, 14 herramientas con permisos y confirmación, creación real de
+PowerPoint/Excel/Word/PDF, automatizaciones programadas, notificaciones y PWA para iPhone con acceso
+autenticado. Guía completa: [`docs/JARVIS.md`](docs/JARVIS.md).
+
+```bash
+bash scripts/voice-e2e.sh "Jarvis, ¿qué sabes del Proyecto Aurora?"   # prueba de voz real
+bash scripts/smoke-jarvis.sh                                          # voz, herramientas, permisos, auth
+```
+
 ---
 
 ## 1. Requisitos
@@ -115,9 +127,18 @@ Carpetas locales con sincronización incremental por hash. Google Drive, Gmail, 
 aparecen como **no configurados** (requieren OAuth y no se han declarado terminados).
 
 ### Configuración
-Clave de NVIDIA, modelos, prueba real de conectividad, privacidad (interruptor global de
-procesamiento remoto), rendimiento (concurrencia, tokens, tamaño de fragmento, temperatura),
-respaldos y restauración.
+Clave de NVIDIA, modelos (incluido el modelo específico para voz), prueba real de conectividad,
+privacidad (interruptor global de procesamiento remoto), rendimiento, voz, notificaciones, acceso
+remoto con token, respaldos y restauración.
+
+### JARVIS
+Conversación por voz y texto con herramientas: crea presentaciones, hojas de cálculo, documentos,
+PDF y diagramas; consulta tu memoria, busca archivos, lee la agenda y envía notificaciones.
+Push-to-talk, manos libres con palabra de activación, interrupción y respuestas habladas.
+
+### Herramientas y Automatizaciones
+Catálogo de acciones con permisos, riesgo y registro; archivos generados descargables. Motor de
+tareas programadas creado en lenguaje natural, con próxima ejecución y notificación.
 
 ---
 

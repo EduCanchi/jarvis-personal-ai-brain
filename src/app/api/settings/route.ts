@@ -16,6 +16,18 @@ const ALLOWED = new Set([
   "concurrencia",
   "procesamiento_remoto",
   "tema",
+  "voz_tts",
+  "voz_velocidad",
+  "voz_volumen",
+  "palabra_activacion",
+  "modo_manos_libres",
+  "auto_tts",
+  "canal_notificaciones",
+  "ntfy_topic",
+  "telegram_token",
+  "telegram_chat_id",
+  "modelo_stt_ruta",
+  "modelo_voz",
 ]);
 
 export async function GET() {

@@ -79,3 +79,32 @@ Este documento es explícito para que no haya funcionalidades declaradas como te
 4. Índice vectorial aproximado (`sqlite-vec`) para >50k fragmentos.
 5. Empaquetado Tauri firmado.
 6. Detección de contradicciones entre documentos.
+
+---
+
+# Ampliación JARVIS — limitaciones añadidas
+
+20. **Latencia de conversación ≈ 4 s** en caliente (y hasta 20 s en frío). No es tiempo real; no se
+    promete conversación simultánea. Se debe a la síntesis `say` (~1,5 s), la transcripción (~1 s) y
+    el modelo remoto (~1 s).
+21. **El modelo de voz es distinto del principal** (`nemotron-3.5-lightning-30b-a3b`) para responder
+    antes. Su calidad es inferior a `nemotron-3-ultra`; se puede cambiar en Configuración.
+22. **`say` no es tan natural como Kokoro/Qwen3-TTS.** Se eligió por latencia, cero descargas y
+    estabilidad en M4/16 GB. Kokoro requeriría Python + modelos (~300 MB) y no mejora la latencia.
+23. **whisper `small`** comete errores en nombres propios (“Yarvis”). La palabra de activación tolera
+    hasta 2 ediciones, pero la transcripción puede fallar en nombres poco comunes. Se puede subir a
+    `medium` descargando otro modelo.
+24. **Permisos de macOS**: Calendario, Recordatorios y Notas usan AppleScript y requieren autorización
+    de Automatización. Sin ella, las herramientas devuelven un error explicativo (no se ha aceptado
+    el diálogo en esta sesión).
+25. **Sin Canva.** No hay integración oficial verificada; no se declara conectada.
+26. **Sin Web Push.** Las notificaciones al iPhone dependen de ntfy o Telegram (gratuitos) y de que
+    el Mac esté encendido. No hay cola en la nube.
+27. **Acceso remoto** depende de una red privada (Tailscale). El servidor no se expone a internet y
+    no hay cuentas multiusuario: un único token compartido, rotable.
+28. **Mermaid** se genera como fuente `.mmd`; no se renderiza a PNG/SVG dentro de la app (requiere
+    Chromium headless y ~300 MB adicionales).
+29. **Automatizaciones** solo corren con la app abierta y el Mac despierto; el planificador revisa
+    cada 60 s, por lo que la precisión es de ±1 minuto.
+30. **Herramientas de creación** generan contenido a partir de lo que pide el usuario o de la
+    memoria; no validan cifras ni hechos. Los archivos son plantillas sobrias, no diseño avanzado.

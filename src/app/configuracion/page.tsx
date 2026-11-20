@@ -34,6 +34,10 @@ export default function ConfiguracionPage() {
     0,
   );
   const { data: healthData } = useApi<{ sistema: { directorio_datos: string } }>("/api/stats", 0);
+  const { data: voz } = useApi<any>("/api/voice/transcribe", 0);
+  const { data: notif, reload: reloadNotif } = useApi<any>("/api/notifications", 0);
+  const [token, setToken] = useState<string | null>(null);
+  const [notifForm, setNotifForm] = useState({ canal: "local", ntfy: "", tgToken: "", tgChat: "" });
 
   const [keyInput, setKeyInput] = useState("");
   const [health, setHealth] = useState<Health[] | null>(null);
@@ -45,6 +49,17 @@ export default function ConfiguracionPage() {
   useEffect(() => {
     if (settingsData?.settings) setLocal(settingsData.settings);
   }, [settingsData]);
+
+  useEffect(() => {
+    if (notif) {
+      setNotifForm({
+        canal: notif.canal ?? "local",
+        ntfy: notif.ntfy_topic ?? "",
+        tgToken: "",
+        tgChat: notif.telegram_chat_id ?? "",
+      });
+    }
+  }, [notif]);
 
   const notify = (msg: string, kind: "info" | "error" | "ok" = "info") => {
     setToast({ msg, kind });
@@ -366,6 +381,223 @@ export default function ConfiguracionPage() {
           ))}
           {(backupsData?.backups ?? []).length === 0 && <div className="text-xs text-mist-400">Todavía no hay respaldos.</div>}
         </div>
+      </section>
+
+
+      <section className="card mb-4 p-5">
+        <h2 className="h2 mb-3">Voz</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="label">Voz de JARVIS</label>
+            <select
+              className="input"
+              value={local.voz_tts ?? "Mónica"}
+              onChange={(e) => void saveSettings({ voz_tts: e.target.value })}
+            >
+              {(voz?.voces ?? []).map((v: any) => (
+                <option key={`${v.nombre}-${v.idioma}`} value={v.nombre}>
+                  {v.nombre} ({v.idioma})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Velocidad (palabras/min)</label>
+            <input
+              className="input"
+              type="number"
+              min={120}
+              max={260}
+              value={local.voz_velocidad ?? "185"}
+              onChange={(e) => setLocal({ ...local, voz_velocidad: e.target.value })}
+              onBlur={(e) => void saveSettings({ voz_velocidad: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label">Palabra de activación</label>
+            <input
+              className="input"
+              value={local.palabra_activacion ?? "jarvis"}
+              onChange={(e) => setLocal({ ...local, palabra_activacion: e.target.value })}
+              onBlur={(e) => void saveSettings({ palabra_activacion: e.target.value })}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="label">Modelo para conversación por voz</label>
+            <select
+              className="input font-mono text-[11px]"
+              value={local.modelo_voz ?? "nvidia/nemotron-3.5-lightning-30b-a3b"}
+              onChange={(e) => void saveSettings({ modelo_voz: e.target.value })}
+            >
+              {(models?.catalogo.ids ?? []).map((id) => (
+                <option key={id} value={id}>
+                  {id}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[10px] text-mist-400">
+              Se usa solo cuando hablas por voz, para responder antes. El chat escrito sigue usando el modelo principal.
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/6 bg-white/[0.02] p-3 text-[11px] text-mist-400">
+            <div className="flex items-center gap-2">
+              <span className={`node-dot ${voz?.disponible ? "bg-emerald-400" : "bg-amber-400"}`} />
+              whisper.cpp {voz?.disponible ? "listo" : "no disponible"}
+            </div>
+            <div className="mt-1 font-mono text-[10px]">modelo: {voz?.stt?.modelo ?? "—"}</div>
+            <div className="font-mono text-[10px]">estado: {voz?.stt?.cargado ? "cargado en memoria" : "en espera (se carga al hablar)"}</div>
+          </div>
+        </div>
+        <p className="mt-3 text-[11px] text-mist-400">
+          Reconocimiento local con whisper.cpp (español). Síntesis con las voces nativas de macOS. Ningún audio sale del
+          Mac salvo el texto que se envía a NVIDIA para razonar.
+        </p>
+      </section>
+
+      <section className="card mb-4 p-5">
+        <h2 className="h2 mb-3">Notificaciones</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="label">Canal</label>
+            <select
+              className="input"
+              value={notifForm.canal}
+              onChange={(e) => setNotifForm({ ...notifForm, canal: e.target.value })}
+            >
+              <option value="local">Notificación local (Mac)</option>
+              <option value="ntfy">ntfy.sh (iPhone, gratis)</option>
+              <option value="telegram">Telegram</option>
+            </select>
+          </div>
+          {notifForm.canal === "ntfy" && (
+            <div>
+              <label className="label">Tema de ntfy</label>
+              <input
+                className="input font-mono text-xs"
+                placeholder="jarvis-usuario-8f3a"
+                value={notifForm.ntfy}
+                onChange={(e) => setNotifForm({ ...notifForm, ntfy: e.target.value })}
+              />
+            </div>
+          )}
+          {notifForm.canal === "telegram" && (
+            <>
+              <div>
+                <label className="label">Token del bot</label>
+                <input
+                  className="input font-mono text-xs"
+                  type="password"
+                  placeholder="123456:ABC…"
+                  value={notifForm.tgToken}
+                  onChange={(e) => setNotifForm({ ...notifForm, tgToken: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="label">Chat ID</label>
+                <input
+                  className="input font-mono text-xs"
+                  value={notifForm.tgChat}
+                  onChange={(e) => setNotifForm({ ...notifForm, tgChat: e.target.value })}
+                />
+              </div>
+            </>
+          )}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            className="btn-ghost text-xs"
+            onClick={async () => {
+              try {
+                await api("/api/notifications", {
+                  method: "PUT",
+                  body: JSON.stringify({
+                    canal_notificaciones: notifForm.canal,
+                    ntfy_topic: notifForm.ntfy,
+                    telegram_token: notifForm.tgToken || undefined,
+                    telegram_chat_id: notifForm.tgChat,
+                  }),
+                });
+                notify("Canal guardado", "ok");
+                await reloadNotif();
+              } catch (err: any) {
+                notify(err.message, "error");
+              }
+            }}
+          >
+            Guardar canal
+          </button>
+          <button
+            className="btn-primary text-xs"
+            onClick={async () => {
+              try {
+                const r = await api<any>("/api/notifications", {
+                  method: "POST",
+                  body: JSON.stringify({ titulo: "JARVIS", mensaje: "Notificación de prueba. Todo funciona." }),
+                });
+                notify(r.detalle, r.ok ? "ok" : "error");
+                await reloadNotif();
+              } catch (err: any) {
+                notify(err.message, "error");
+              }
+            }}
+          >
+            Enviar prueba
+          </button>
+        </div>
+        {(notif?.recientes ?? []).length > 0 && (
+          <div className="mt-3 space-y-1">
+            {notif.recientes.slice(0, 5).map((n: any) => (
+              <div key={n.id} className="flex items-center gap-2 text-[10px] text-mist-400">
+                <span className={`node-dot ${n.status === "enviada" ? "bg-emerald-400" : "bg-red-400"}`} />
+                <span className="font-mono">{n.channel}</span>
+                <span className="truncate">{n.title}</span>
+                <span className="ml-auto">{formatDate(n.created_at)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="card mb-4 p-5">
+        <h2 className="h2 mb-2">Acceso remoto desde el iPhone</h2>
+        <p className="mb-3 text-[11px] leading-relaxed text-mist-400">
+          La app solo escucha en 127.0.0.1. Para usarla desde el iPhone sin exponerla a internet, usa una red privada
+          (Tailscale o similar) y abre la URL del Mac desde el móvil. Las peticiones que no vengan de localhost exigen
+          este token.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="btn-ghost text-xs"
+            onClick={async () => {
+              try {
+                const r = await api<{ token: string }>("/api/auth/status", { method: "POST", body: JSON.stringify({}) });
+                setToken(r.token);
+              } catch (err: any) {
+                notify(err.message, "error");
+              }
+            }}
+          >
+            {token ? "Ocultar token" : "Mostrar token"}
+          </button>
+          <button
+            className="btn-ghost text-xs"
+            onClick={async () => {
+              if (!confirm("Se invalidarán las sesiones del iPhone. ¿Rotar el token?")) return;
+              try {
+                const r = await api<{ token: string }>("/api/auth/status", { method: "POST", body: JSON.stringify({ accion: "rotar" }) });
+                setToken(r.token);
+                notify("Token rotado", "ok");
+              } catch (err: any) {
+                notify(err.message, "error");
+              }
+            }}
+          >
+            Rotar token
+          </button>
+        </div>
+        {token && (
+          <pre className="mt-2 select-all break-all rounded-lg bg-ink-950/60 p-3 font-mono text-[11px] text-neon-400">{token}</pre>
+        )}
       </section>
 
       <section className="card p-5">
