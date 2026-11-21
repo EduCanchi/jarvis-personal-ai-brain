@@ -28,6 +28,17 @@ const ALLOWED = new Set([
   "telegram_chat_id",
   "modelo_stt_ruta",
   "modelo_voz",
+  "motor_stt",
+  "motor_voz_es",
+  "voz_es",
+  "motor_voz_en",
+  "voz_en",
+  "silencio_ms",
+  "salud_habilitada",
+  "correo_habilitado",
+  "memoria_automatica",
+  "magpie_function_id",
+  "parakeet_function_id",
 ]);
 
 export async function GET() {

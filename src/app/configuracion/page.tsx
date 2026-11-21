@@ -422,6 +422,22 @@ export default function ConfiguracionPage() {
               onBlur={(e) => void saveSettings({ palabra_activacion: e.target.value })}
             />
           </div>
+          <div>
+            <label className="label">Reconocimiento de voz</label>
+            <select
+              className="input"
+              value={local.motor_stt ?? "whisper"}
+              onChange={(e) => void saveSettings({ motor_stt: e.target.value })}
+            >
+              <option value="whisper">whisper.cpp local (recomendado)</option>
+              <option value="parakeet" disabled={!voz?.parakeet_disponible}>
+                Parakeet (NVIDIA, nube){voz?.parakeet_disponible ? "" : " — sin clave"}
+              </option>
+            </select>
+            <p className="mt-1 text-[10px] text-mist-400">
+              Parakeet añade puntuación pero confundió “mañana” en las pruebas; whisper fue más preciso.
+            </p>
+          </div>
           <div className="sm:col-span-2">
             <label className="label">Modelo para conversación por voz</label>
             <select

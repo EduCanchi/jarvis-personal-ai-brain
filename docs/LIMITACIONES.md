@@ -126,3 +126,26 @@ Este documento es explícito para que no haya funcionalidades declaradas como te
     revisar la procedencia de cada voz, aunque el modelo sea Apache-2.0.
 36. **Voces personalizadas**: se aceptan modelos Piper ONNX; no hay interfaz para entrenar voces dentro
     de la app. VoiceStudio no está incluido.
+
+
+---
+
+# Memoria, salud, correo y voz (fase 3)
+
+37. **Parakeet y Magpie solo son accesibles por gRPC (Riva/NVCF)**, no por la API REST: requieren
+    `function-id` y el cliente `nvidia-riva-client`. Si NVIDIA cambia el function-id o caduca la
+    prueba, hay que actualizar el ajuste. Whisper y Kokoro siguen como respaldo local.
+38. **No se alcanza 1–2 s por turno**: la cadena completa mide 3,3–6,1 s en caliente.
+39. **Magpie es un servicio en la nube** (la voz se sintetiza fuera del Mac). Kokoro/Piper son locales.
+    La voz de Magpie no está activada por defecto: requiere tu aprobación en Voces.
+39. **Gmail directo no está conectado**: solo importación de `.eml`. Drive, Calendar y Notion siguen
+    pendientes de OAuth.
+40. **La memoria automática es conservadora**: puede no captar matices; el usuario puede añadir,
+    corregir u olvidar recuerdos manualmente.
+41. **Salud**: la extracción depende del modelo; los valores deben revisarse. No hay integración con
+    laboratorios ni históricos externos. La app no diagnostica.
+42. **Correo**: la clasificación es heurística (modelo) y puede fallar; no mueve ni borra mensajes.
+    El estilo aprendido se basa en los correos importados; con pocos ejemplos es limitado.
+43. **Preferencias de presentaciones** (estructura visual, plantillas) aún no se aprenden.
+44. **Cifrado**: cubre salud y memorias marcadas como sensibles; el resto de la base no está cifrada
+    en reposo (FileVault cubre el disco).

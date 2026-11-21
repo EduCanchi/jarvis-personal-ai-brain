@@ -269,3 +269,58 @@ Cadena completa medida con `scripts/voice-e2e.sh`: STT 0,78 s · asistente 2,1 s
   arranque **35 s** en macOS. Se sustituyó por un bind directo: arranque en **0,25 s**.
 - Kokoro rechazaba `lang="en"`; se mapea a `en-gb`.
 - Al cambiar de motor se descarga el anterior para no sumar 1,2 GB de RAM.
+
+
+---
+
+# Fase 3 — memoria, salud, correo y voz
+
+## K. Reinicio de memoria
+
+Respaldo verificado (`integrity_check: ok`, 4 documentos) y borrado de 4 documentos, 4 fragmentos,
+40 nodos, 60 relaciones, 4 conversaciones, 5 artefactos, 1 automatización, 22 ejecuciones y 68 eventos.
+Conservados código, modelos, clave, token y configuración.
+
+## L. Salud (datos sintéticos)
+
+| Prueba | Resultado |
+| --- | --- |
+| Extracción de 3 informes PDF | 3 estudios × 4 parámetros, fechas correctas |
+| Tendencia de colesterol total | 210 → 195 → 188 mg/dL, aviso de rango correcto |
+| Fuera de rango | 1 valor detectado (210 > 200) |
+| Consulta hablada/escrita | El asistente usó `consultar_salud` y respondió con las cifras reales |
+| Eliminación | Borra estudio y resultados (probado por API) |
+
+## M. Correo (4 `.eml` sintéticos)
+
+| Prueba | Resultado |
+| --- | --- |
+| Importación | 4 correos (2 enviados, 2 recibidos) |
+| Clasificación | `fraude` para phishing, `solicitud` para la petición real, `compromiso`/`solicitud` en enviados |
+| Perfil de estilo | tono directo, saludo “Hola [Nombre]”, despedida “Un saludo,”, firma “Edu” |
+| Borrador | reproduce el estilo y pide el desglose de presupuesto sin inventar |
+
+## N. Memoria
+
+| Prueba | Resultado |
+| --- | --- |
+| Alta manual | ✅ |
+| “¿Qué sabes de mí?” | respondió con preferencias y estilo, sin inventar |
+| Aprendizaje automático | conservador: no generó ruido en las pruebas |
+| Herramientas nuevas | 24 en total (memoria, salud, correo, documentos, Apple) |
+
+## O. Voz
+
+| Prueba | Resultado |
+| --- | --- |
+| Parakeet REST | 404 (no existe endpoint) |
+| Parakeet gRPC (`71203149-…`) | ✅ 1,56 s · texto con puntuación |
+| Magpie REST | 404 / 410 |
+| Magpie gRPC (`877104f7-…`, Diego es-US) | ✅ 2,27 s para 11,3 s de audio · transcripción perfecta |
+| STT local | 0,6 – 1,5 s |
+| Cadena completa | 3,3 – 6,1 s hasta el primer audio |
+
+## P. Calidad
+
+- 28 pruebas unitarias (incluye cifrado AES-GCM y normalización de analitos).
+- `npm run build` correcto.

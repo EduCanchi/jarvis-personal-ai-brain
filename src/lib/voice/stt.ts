@@ -5,6 +5,7 @@ import os from "node:os";
 import { dataDir } from "../paths";
 import { getSetting, logEvent } from "../db";
 import { redact } from "../secrets";
+import { transcribeParakeet } from "./engines";
 
 const WHISPER_PORT = 8099;
 const IDLE_MS = 10 * 60 * 1000;
@@ -141,6 +142,15 @@ export interface Transcription {
 /** Transcribe audio (webm/ogg/wav/mp3/m4a) con whisper.cpp en local. */
 export async function transcribe(input: Buffer, filename: string): Promise<Transcription> {
   const started = Date.now();
+  const provider = getSetting("motor_stt", "whisper");
+
+  if (provider === "parakeet") {
+    const cloud = await transcribeParakeet(input, "es-US");
+    if (cloud && cloud.text) {
+      return { text: cloud.text, ms: Date.now() - started, modelo: "parakeet-1.1b-rnnt-multilingual" };
+    }
+  }
+
   await ensureServer();
   const s = state();
   s.lastUsed = Date.now();

@@ -2,6 +2,7 @@ import { registerTool } from "./registry";
 import { registerDocumentTools } from "./documents";
 import "./apple";
 import "./personal";
+import "./personal-data";
 
 let registered = false;
 

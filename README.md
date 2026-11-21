@@ -19,6 +19,7 @@ autenticado. Guía completa: [`docs/JARVIS.md`](docs/JARVIS.md).
 bash scripts/voice-e2e.sh "Jarvis, ¿qué sabes del Proyecto Aurora?"   # prueba de voz real
 bash scripts/smoke-jarvis.sh                                          # voz, herramientas, permisos, auth
 bash scripts/install-voices.sh                                        # Kokoro + voz JARVIS (Piper)
+bash scripts/smoke.sh && bash scripts/smoke-jarvis.sh                 # verificación completa
 ```
 
 ---
@@ -137,9 +138,16 @@ Conversación por voz y texto con herramientas: crea presentaciones, hojas de c�
 PDF y diagramas; consulta tu memoria, busca archivos, lee la agenda y envía notificaciones.
 Push-to-talk, manos libres con palabra de activación, interrupción y respuestas habladas.
 
+### Memoria personal, salud y correo
+Memorias diferenciadas (episódica, semántica, preferencias, procedimental, documental y salud) con
+origen, confianza y cifrado para lo sensible. Módulo de salud con consentimiento explícito,
+extracción de analíticas y comparación de tendencias. Módulo de correo con importación `.eml`,
+clasificación, aprendizaje de estilo y borradores. Detalle: [`docs/MEMORIA.md`](docs/MEMORIA.md).
+
 ### Voces
-Comparador de voces en **Voces**: Kokoro (español e inglés británico) y la voz JARVIS de Piper
-(solo inglés), con muestras, latencia, licencia y activación por idioma. Investigación completa en
+Comparador de voces en **Voces**: Kokoro (español e inglés británico), **Magpie de NVIDIA**
+(voz masculina española Diego, vía Riva gRPC) y la voz JARVIS de Piper (solo inglés), con muestras,
+latencia, licencia y activación por idioma. STT: whisper.cpp local o Parakeet (NVIDIA) como opción. Investigación completa en
 [`docs/VOCES.md`](docs/VOCES.md).
 
 ### Herramientas y Automatizaciones

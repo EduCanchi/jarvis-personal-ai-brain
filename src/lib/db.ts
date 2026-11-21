@@ -184,6 +184,89 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS memories (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  content TEXT NOT NULL,
+  summary TEXT,
+  source TEXT NOT NULL,
+  source_ref TEXT,
+  provenance TEXT,
+  confidence REAL NOT NULL DEFAULT 0.7,
+  status TEXT NOT NULL DEFAULT 'activa',
+  sensitive INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_used_at TEXT,
+  use_count INTEGER NOT NULL DEFAULT 0,
+  hash TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_memories_kind ON memories(kind);
+CREATE INDEX IF NOT EXISTS idx_memories_status ON memories(status);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+  content, summary, memory_id UNINDEXED, tokenize='unicode61 remove_diacritics 2'
+);
+
+CREATE TABLE IF NOT EXISTS preferences (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  confidence REAL NOT NULL DEFAULT 0.8,
+  source TEXT,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS health_studies (
+  id TEXT PRIMARY KEY,
+  taken_at TEXT,
+  lab TEXT,
+  source_doc_id TEXT,
+  notes TEXT,
+  consent INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS health_results (
+  id TEXT PRIMARY KEY,
+  study_id TEXT NOT NULL REFERENCES health_studies(id) ON DELETE CASCADE,
+  analyte TEXT NOT NULL,
+  analyte_norm TEXT NOT NULL,
+  value REAL,
+  unit TEXT,
+  ref_low REAL,
+  ref_high REAL,
+  flag TEXT,
+  raw_encrypted TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_health_norm ON health_results(analyte_norm);
+
+CREATE TABLE IF NOT EXISTS emails (
+  id TEXT PRIMARY KEY,
+  message_id TEXT,
+  from_addr TEXT,
+  to_addr TEXT,
+  subject TEXT,
+  sent_at TEXT,
+  body TEXT,
+  folder TEXT,
+  labels TEXT,
+  classification TEXT,
+  confidence REAL,
+  needs_reply INTEGER,
+  entities TEXT,
+  imported_at TEXT NOT NULL,
+  source TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_emails_class ON emails(classification);
+
+CREATE TABLE IF NOT EXISTS email_style (
+  id TEXT PRIMARY KEY,
+  profile TEXT NOT NULL,
+  samples INTEGER NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS connectors (
   id TEXT PRIMARY KEY,
   kind TEXT NOT NULL,
@@ -248,6 +331,11 @@ function seedSettings(conn: DatabaseSync) {
     voz_es: "em_alex",
     motor_voz_en: "kokoro",
     voz_en: "bm_george",
+    motor_stt: "whisper",
+    silencio_ms: "1100",
+    salud_habilitada: "false",
+    correo_habilitado: "false",
+    memoria_automatica: "true",
   };
   const stmt = conn.prepare("INSERT OR IGNORE INTO settings(key, value) VALUES(?, ?)");
   for (const [k, v] of Object.entries(defaults)) stmt.run(k, v);

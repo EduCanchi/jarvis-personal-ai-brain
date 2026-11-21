@@ -27,13 +27,18 @@ import numpy as np
 LOCK = threading.Lock()
 
 STATE = {
-    "engine": None,          # "kokoro" | "piper"
+    "engine": None,          # "kokoro" | "piper" | "magpie"
     "kokoro": None,
     "piper": None,
     "piper_id": None,
+    "magpie": None,
+    "asr": None,
     "loaded_at": None,
     "load_ms": 0,
 }
+
+MAGPIE_FUNCTION_ID = os.environ.get("MAGPIE_FUNCTION_ID", "877104f7-e885-42b9-8de8-f6e4c6303969")
+PARAKEET_FUNCTION_ID = os.environ.get("PARAKEET_FUNCTION_ID", "71203149-d3b7-4460-8231-1be2543a1fca")
 
 ARGS = None
 
@@ -88,6 +93,52 @@ def load_piper(voice_id: str):
     return STATE["piper"]
 
 
+def riva_auth(function_id: str, key: str):
+    from riva.client import Auth
+
+    return Auth(
+        uri="grpc.nvcf.nvidia.com:443",
+        use_ssl=True,
+        metadata_args=[["function-id", function_id], ["authorization", "Bearer " + key]],
+    )
+
+
+def load_magpie():
+    from riva.client.tts import SpeechSynthesisService
+
+    key = os.environ.get("MAGPIE_API_KEY", "").strip()
+    if not key:
+        raise RuntimeError("Falta la clave de Magpie")
+    if STATE["magpie"] is None:
+        t0 = time.time()
+        STATE["magpie"] = SpeechSynthesisService(riva_auth(MAGPIE_FUNCTION_ID, key))
+        STATE["load_ms"] = int((time.time() - t0) * 1000)
+    STATE["engine"] = "magpie"
+    STATE["loaded_at"] = time.time()
+    return STATE["magpie"]
+
+
+def load_asr():
+    from riva.client import ASRService
+
+    key = os.environ.get("PARAKEET_API_KEY", "").strip()
+    if not key:
+        raise RuntimeError("Falta la clave de Parakeet")
+    if STATE["asr"] is None:
+        STATE["asr"] = ASRService(riva_auth(PARAKEET_FUNCTION_ID, key))
+    return STATE["asr"]
+
+
+def pcm_to_wav(raw: bytes, sample_rate: int) -> bytes:
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(int(sample_rate))
+        wf.writeframes(raw)
+    return buf.getvalue()
+
+
 def to_wav(samples: np.ndarray, sample_rate: int) -> bytes:
     pcm = np.clip(samples, -1.0, 1.0)
     int16 = (pcm * 32767).astype(np.int16)
@@ -114,6 +165,30 @@ def synth(payload: dict) -> tuple[bytes, dict]:
     t0 = time.time()
 
     with LOCK:
+        if engine == "magpie":
+            from riva.client.proto.riva_audio_pb2 import AudioEncoding
+
+            svc = load_magpie()
+            resp = svc.synthesize(
+                text,
+                voice_name=voice,
+                language_code=lang if "-" in lang else ("es-US" if lang == "es" else "en-US"),
+                encoding=AudioEncoding.LINEAR_PCM,
+                sample_rate_hz=22050,
+            )
+            wav = pcm_to_wav(resp.audio, 22050)
+            meta = {
+                "engine": "magpie",
+                "voice": voice,
+                "lang": lang,
+                "sample_rate": 22050,
+                "duration_s": round(len(resp.audio) / 2 / 22050, 3),
+                "synth_ms": int((time.time() - t0) * 1000),
+                "load_ms": STATE["load_ms"],
+                "rss_mb": round(rss_mb(), 1),
+            }
+            return wav, meta
+
         if engine == "piper":
             voice_obj = load_piper(voice)
             from piper.config import SynthesisConfig
@@ -164,6 +239,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {
                 "ok": True,
                 "engine": STATE["engine"],
+                "magpie_configurado": bool(os.environ.get("MAGPIE_API_KEY")),
+                "parakeet_configurado": bool(os.environ.get("PARAKEET_API_KEY")),
                 "load_ms": STATE["load_ms"],
                 "rss_mb": round(rss_mb(), 1),
                 "voices_piper": sorted(os.listdir(ARGS.piper_dir)) if os.path.isdir(ARGS.piper_dir) else [],
@@ -179,11 +256,37 @@ class Handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             return self._json(400, {"error": "JSON inválido"})
 
+        if self.path == "/asr":
+            try:
+                import base64
+                from riva.client import RecognitionConfig
+
+                raw = base64.b64decode(payload.get("audio_b64") or "")
+                if not raw:
+                    raise ValueError("audio vacío")
+                svc = load_asr()
+                cfg = RecognitionConfig(
+                    language_code=payload.get("language") or "es-US",
+                    max_alternatives=1,
+                    enable_automatic_punctuation=True,
+                )
+                t0 = time.time()
+                resp = svc.offline_recognize(raw, cfg)
+                text = " ".join(r.alternatives[0].transcript for r in resp.results).strip()
+                return self._json(200, {
+                    "text": text,
+                    "ms": int((time.time() - t0) * 1000),
+                    "provider": "parakeet",
+                })
+            except Exception as exc:  # noqa: BLE001
+                return self._json(500, {"error": f"{type(exc).__name__}: {exc}"})
+
         if self.path == "/unload":
             with LOCK:
                 STATE["kokoro"] = None
                 STATE["piper"] = None
                 STATE["piper_id"] = None
+                STATE["magpie"] = None
                 STATE["engine"] = None
             return self._json(200, {"ok": True})
 

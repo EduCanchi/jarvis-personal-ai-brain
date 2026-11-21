@@ -2,6 +2,7 @@ import { db, getSetting, now, uuid, Row } from "./db";
 import { chat, extractFirstJson, NvidiaError } from "./nvidia";
 import { retrieve, Source } from "./rag";
 import { getTool, runTool, toolsForPrompt, ToolResult } from "./tools";
+import { learnFromExchange, listPreferences, searchMemories, touchMemory } from "./memory";
 import { redact } from "./secrets";
 
 export interface ToolTrace {
@@ -118,10 +119,28 @@ export async function askJarvis(input: {
   });
 
   const voiceModel = origin === "voz" ? getSetting("modelo_voz", "nvidia/nemotron-3.5-lightning-30b-a3b") : "";
+  const memories = searchMemories(question, 6);
+  const preferences = listPreferences().slice(0, 12);
+  const memoryBlock = [
+    memories.length
+      ? memories
+          .map(
+            (m, i) =>
+              `[M${i + 1}] (${m.kind}, confianza ${Math.round(m.confidence * 100)}%, fuente ${m.source}) ${m.content.slice(0, 500)}`,
+          )
+          .join("\n")
+      : "(Sin recuerdos personales relevantes.)",
+    preferences.length
+      ? `Preferencias: ${preferences.map((p) => `${p.key}=${p.value}`).join(" · ").slice(0, 1200)}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
   const messages: any[] = [
     {
       role: "system",
-      content: `${PERSONA}\n\nFECHA Y HORA: ${fecha}\n\nHERRAMIENTAS DISPONIBLES:\n${toolsForPrompt()}${
+      content: `${PERSONA}\n\nFECHA Y HORA: ${fecha}\n\nMEMORIA PERSONAL DEL USUARIO (úsala si es relevante, no la recites):\n${memoryBlock}\n\nHERRAMIENTAS DISPONIBLES:\n${toolsForPrompt()}${
         origin === "voz"
           ? "\n\nMODO VOZ: responde en una o dos frases, sin listas, sin markdown y sin emojis. Si hace falta más detalle, ofrécelo al final en una frase corta."
           : ""
@@ -253,6 +272,13 @@ export async function askJarvis(input: {
       JSON.stringify({ origen: origin, tiempos: { recuperacion_ms: retrievalMs, modelo_ms: modelMs, total_ms: total } }),
     );
   db().prepare("UPDATE conversations SET updated_at = ? WHERE id = ?").run(now(), conversationId);
+  for (const memory of memories) touchMemory(memory.id);
+  void learnFromExchange({
+    question,
+    answer,
+    tools: traces.map((t) => ({ herramienta: t.herramienta, resumen: t.resumen })),
+    conversationId,
+  }).catch(() => {});
 
   return {
     conversation_id: conversationId,

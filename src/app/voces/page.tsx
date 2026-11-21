@@ -225,6 +225,13 @@ export default function VocesPage() {
                 <td className="py-1.5 text-emerald-300">Correcto</td>
               </tr>
               <tr className="border-t border-white/5">
+                <td className="py-1.5 pr-4">Magpie (Diego)</td>
+                <td className="py-1.5 pr-4">NVIDIA Riva</td>
+                <td className="py-1.5 pr-4">1,8 – 2,3 s</td>
+                <td className="py-1.5 pr-4">nube</td>
+                <td className="py-1.5 text-emerald-300">Correcto</td>
+              </tr>
+              <tr className="border-t border-white/5">
                 <td className="py-1.5 pr-4">Piper JARVIS</td>
                 <td className="py-1.5 pr-4">109 MB ONNX</td>
                 <td className="py-1.5 pr-4">1,5 – 1,7 s</td>

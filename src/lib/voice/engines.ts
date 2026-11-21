@@ -4,14 +4,14 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { cacheDir, dataDir } from "../paths";
 import { getSetting, logEvent } from "../db";
-import { redact } from "../secrets";
+import { getMagpieKey, getParakeetKey, redact } from "../secrets";
 
 const PORT = 8100;
 const IDLE_MS = 10 * 60 * 1000;
 
 export interface VoiceOption {
   id: string;
-  motor: "kokoro" | "piper" | "apple";
+  motor: "kokoro" | "piper" | "magpie" | "apple";
   voz: string;
   idioma: "es" | "en";
   nombre: string;
@@ -21,6 +21,11 @@ export interface VoiceOption {
   origen: string;
   nota?: string;
 }
+
+export const MAGPIE_VOICES = [
+  { id: "magpie-diego", voz: "Magpie-Multilingual.ES-US.Diego", idioma: "es" as const, nombre: "Diego (Magpie, es-US)" },
+  { id: "magpie-aria", voz: "Magpie-Multilingual.EN-US.Aria", idioma: "en" as const, nombre: "Aria (Magpie, en-US)" },
+];
 
 export const VOICES: VoiceOption[] = [
   {
@@ -44,6 +49,28 @@ export const VOICES: VoiceOption[] = [
     descripcion: "Masculina, algo más oscura y pausada. Alternativa a Álex.",
     licencia: "Apache-2.0 (Kokoro-82M)",
     origen: "kokoro-onnx · hexgrad/Kokoro",
+  },
+  {
+    id: "magpie-diego",
+    motor: "magpie",
+    voz: "Magpie-Multilingual.ES-US.Diego",
+    idioma: "es",
+    nombre: "Diego (Magpie, es-US)",
+    genero: "masculina",
+    descripcion: "Voz masculina de NVIDIA Magpie: profunda, pausada y expresiva. Síntesis en la nube (~1,8 s).",
+    licencia: "NVIDIA API Trial · uso personal",
+    origen: "NVIDIA Magpie TTS Multilingual (Riva gRPC)",
+  },
+  {
+    id: "magpie-aria",
+    motor: "magpie",
+    voz: "Magpie-Multilingual.EN-US.Aria",
+    idioma: "en",
+    nombre: "Aria (Magpie, en-US)",
+    genero: "femenina",
+    descripcion: "Voz inglesa de Magpie, clara y expresiva.",
+    licencia: "NVIDIA API Trial · uso personal",
+    origen: "NVIDIA Magpie TTS Multilingual (Riva gRPC)",
   },
   {
     id: "piper-jarvis-es",
@@ -170,7 +197,16 @@ async function ensureWorker(): Promise<void> {
     const proc = spawn(
       p.python,
       [p.script, "--port", String(PORT), "--kokoro-dir", p.kokoro, "--piper-dir", p.piper],
-      { stdio: ["ignore", "ignore", "pipe"] },
+      {
+        stdio: ["ignore", "ignore", "pipe"],
+        env: {
+          ...process.env,
+          MAGPIE_API_KEY: getMagpieKey() ?? "",
+          PARAKEET_API_KEY: getParakeetKey() ?? "",
+          MAGPIE_FUNCTION_ID: getSetting("magpie_function_id", "877104f7-e885-42b9-8de8-f6e4c6303969"),
+          PARAKEET_FUNCTION_ID: getSetting("parakeet_function_id", "71203149-d3b7-4460-8231-1be2543a1fca"),
+        },
+      },
     );
     s.proc = proc;
     proc.stderr?.on("data", (chunk: Buffer) => {
@@ -261,14 +297,22 @@ export function detectLang(text: string): "es" | "en" {
   return es + esWords >= en ? "es" : "en";
 }
 
-export function resolveVoice(text: string): { motor: "kokoro" | "piper" | "apple"; voz: string; idioma: "es" | "en" } {
+export function resolveVoice(text: string): { motor: "kokoro" | "piper" | "magpie" | "apple"; voz: string; idioma: "es" | "en" } {
   const idioma = detectLang(text);
   if (idioma === "en") {
-    const motor = (getSetting("motor_voz_en", "kokoro") || "kokoro") as "kokoro" | "piper" | "apple";
-    return { motor, voz: getSetting("voz_en", motor === "piper" ? "jarvis-high" : "bm_george"), idioma };
+    const motor = (getSetting("motor_voz_en", "kokoro") || "kokoro") as "kokoro" | "piper" | "magpie" | "apple";
+    return {
+    motor,
+    voz: getSetting("voz_en", motor === "piper" ? "jarvis-high" : motor === "magpie" ? "Magpie-Multilingual.EN-US.Aria" : "bm_george"),
+    idioma,
+  };
   }
-  const motor = (getSetting("motor_voz_es", "kokoro") || "kokoro") as "kokoro" | "piper" | "apple";
-  return { motor, voz: getSetting("voz_es", "em_alex"), idioma };
+  const motor = (getSetting("motor_voz_es", "kokoro") || "kokoro") as "kokoro" | "piper" | "magpie" | "apple";
+  return {
+    motor,
+    voz: getSetting("voz_es", motor === "magpie" ? "Magpie-Multilingual.ES-US.Diego" : "em_alex"),
+    idioma,
+  };
 }
 
 export interface LocalSynthResult {
@@ -281,7 +325,7 @@ export interface LocalSynthResult {
 
 export async function synthLocal(input: {
   text: string;
-  motor: "kokoro" | "piper";
+  motor: "kokoro" | "piper" | "magpie";
   voz: string;
   idioma: "es" | "en";
   velocidad?: number;
@@ -328,4 +372,36 @@ export async function synthLocal(input: {
     ms: Date.now() - started,
     meta: metaHeader ? JSON.parse(metaHeader) : undefined,
   };
+}
+
+
+export async function parakeetAvailable(): Promise<boolean> {
+  return Boolean(getParakeetKey());
+}
+
+/** Transcribe con Parakeet (Riva gRPC) a través del worker. Devuelve null si falla. */
+export async function transcribeParakeet(input: Buffer, language = "es-US"): Promise<{ text: string; ms: number } | null> {
+  if (!getParakeetKey()) return null;
+  try {
+    await ensureWorker();
+    const s = state();
+    s.lastUsed = Date.now();
+    scheduleIdleStop();
+    const res = await fetch(`http://127.0.0.1:${PORT}/asr`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ audio_b64: input.toString("base64"), language }),
+      signal: AbortSignal.timeout(90_000),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      logEvent("warn", "voz", `Parakeet falló: ${redact(detail.slice(0, 200))}`);
+      return null;
+    }
+    const data = (await res.json()) as { text?: string; ms?: number };
+    return { text: String(data.text ?? "").trim(), ms: Number(data.ms ?? 0) };
+  } catch (err: any) {
+    logEvent("warn", "voz", `Parakeet no disponible: ${redact(String(err?.message ?? err))}`);
+    return null;
+  }
 }

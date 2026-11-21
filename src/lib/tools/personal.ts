@@ -1,6 +1,7 @@
 import { db, getSetting, now, uuid, Row } from "../db";
 import { registerTool } from "./registry";
 import { retrieve } from "../rag";
+import { addMemory, forgetMatching, searchMemories } from "../memory";
 import { localNotification } from "./apple";
 import { redact } from "../secrets";
 
@@ -199,5 +200,72 @@ registerTool({
       resumen: `RAM del sistema: ${free.toFixed(1)} GB libres de ${total.toFixed(1)} GB. Carga media: ${load.toFixed(2)}. Proceso JARVIS: ${Math.round(mem.rss / 1024 ** 2)} MB.`,
       datos: { total_gb: total, libre_gb: free, load, rss_mb: Math.round(mem.rss / 1024 ** 2) },
     };
+  },
+});
+
+
+registerTool({
+  nombre: "buscar_recuerdos",
+  descripcion: "Busca en los recuerdos personales de JARVIS (preferencias, episodios, hechos aprendidos).",
+  parametros: { consulta: { tipo: "texto", descripcion: "Qué recordar", obligatorio: true } },
+  permisos: ["leer_memoria"],
+  riesgo: "bajo",
+  requiere_confirmacion: false,
+  estado: () => ({ conectada: true, detalle: "Memoria personal local" }),
+  ejecutar: async (args) => {
+    const consulta = String(args.consulta ?? "").trim();
+    if (!consulta) throw new Error("Falta la consulta");
+    const memories = searchMemories(consulta, 8);
+    return {
+      ok: true,
+      resumen: memories.length
+        ? memories.map((m) => `• (${m.kind}) ${m.content.slice(0, 240)}`).join("\n")
+        : "No tengo recuerdos sobre eso.",
+      datos: memories.map((m) => ({ id: m.id, kind: m.kind, source: m.source, confidence: m.confidence })),
+    };
+  },
+});
+
+registerTool({
+  nombre: "recordar_hecho",
+  descripcion: "Guarda un hecho, preferencia o episodio duradero sobre el usuario.",
+  parametros: {
+    contenido: { tipo: "texto", descripcion: "Qué recordar", obligatorio: true },
+    tipo: { tipo: "texto", descripcion: "episodica|semantica|preferencia|procedimental" },
+    sensible: { tipo: "booleano", descripcion: "Marcar como sensible (cifrado, fuera de búsqueda)" },
+  },
+  permisos: ["escribir_memoria"],
+  riesgo: "bajo",
+  requiere_confirmacion: false,
+  estado: () => ({ conectada: true, detalle: "Memoria personal local" }),
+  ejecutar: async (args) => {
+    const contenido = String(args.contenido ?? "").trim();
+    if (contenido.length < 5) throw new Error("El recuerdo es demasiado corto");
+    const kind = ["episodica", "semantica", "preferencia", "procedimental"].includes(String(args.tipo))
+      ? (String(args.tipo) as any)
+      : "semantica";
+    const memory = addMemory({
+      kind,
+      content: contenido,
+      source: "conversacion",
+      confidence: 0.85,
+      sensitive: Boolean(args.sensible),
+      provenance: { origen: "herramienta" },
+    });
+    return { ok: true, resumen: `Recordado: ${memory.content.slice(0, 120)}`, datos: { id: memory.id, kind } };
+  },
+});
+
+registerTool({
+  nombre: "olvidar_recuerdo",
+  descripcion: "Elimina recuerdos que coincidan con una consulta. Acción destructiva.",
+  parametros: { consulta: { tipo: "texto", descripcion: "Texto que identifica los recuerdos a borrar", obligatorio: true } },
+  permisos: ["borrar_memoria"],
+  riesgo: "alto",
+  requiere_confirmacion: true,
+  estado: () => ({ conectada: true, detalle: "Memoria personal local" }),
+  ejecutar: async (args) => {
+    const removed = forgetMatching(String(args.consulta ?? ""));
+    return { ok: true, resumen: `${removed} recuerdo(s) eliminados.`, datos: { eliminados: removed } };
   },
 });

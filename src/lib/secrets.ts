@@ -115,3 +115,29 @@ export function redact(text: string): string {
     .replace(/nvapi-[A-Za-z0-9_\-]+/g, "nvapi-••••••")
     .replace(/Bearer\s+[A-Za-z0-9._\-]+/gi, "Bearer ••••••");
 }
+
+
+function keychainValue(account: string): string | null {
+  try {
+    const out = execFileSync(
+      "security",
+      ["find-generic-password", "-s", KEYCHAIN_SERVICE, "-a", account, "-w"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    ).trim();
+    return out || null;
+  } catch {
+    return null;
+  }
+}
+
+export function getMagpieKey(): string | null {
+  return process.env.MAGPIE_API_KEY?.trim() || keychainValue("magpie-api-key");
+}
+
+export function getParakeetKey(): string | null {
+  return process.env.PARAKEET_API_KEY?.trim() || keychainValue("parakeet-api-key");
+}
+
+export function hasCloudVoiceKeys(): { magpie: boolean; parakeet: boolean } {
+  return { magpie: Boolean(getMagpieKey()), parakeet: Boolean(getParakeetKey()) };
+}

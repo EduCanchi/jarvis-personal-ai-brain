@@ -2,6 +2,7 @@ import { fail, handleError, ok } from "@/lib/http";
 import { transcribe, whisperAvailable, whisperStatus } from "@/lib/voice/stt";
 import { listVoices, currentVoice, currentRate } from "@/lib/voice/tts";
 import { getSetting } from "@/lib/db";
+import { getParakeetKey } from "@/lib/secrets";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +27,8 @@ export async function GET() {
       auto_tts: getSetting("auto_tts", "true") === "true",
       motor_voz_es: getSetting("motor_voz_es", "kokoro"),
       voz_es: getSetting("voz_es", "em_alex"),
+      motor_stt: getSetting("motor_stt", "whisper"),
+      parakeet_disponible: Boolean(getParakeetKey()),
       motor_voz_en: getSetting("motor_voz_en", "kokoro"),
       voz_en: getSetting("voz_en", "bm_george"),
     });

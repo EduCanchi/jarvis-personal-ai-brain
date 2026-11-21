@@ -12,6 +12,9 @@ const NAV = [
   { href: "/chat", label: "Chat IA", icon: "chat" },
   { href: "/biblioteca", label: "Biblioteca", icon: "book" },
   { href: "/memoria", label: "Memoria", icon: "memory" },
+  { href: "/memoria-personal", label: "Lo que sé de ti", icon: "memory" },
+  { href: "/salud", label: "Salud", icon: "heart" },
+  { href: "/correo", label: "Correo", icon: "mail" },
   { href: "/herramientas", label: "Herramientas", icon: "tool" },
   { href: "/automatizaciones", label: "Automatizaciones", icon: "clock" },
   { href: "/conexiones", label: "Conexiones", icon: "plug" },
@@ -103,6 +106,19 @@ function Icon({ name, className = "h-[18px] w-[18px]" }: { name: string; classNa
           <path d="M12 7v5l3 2" />
         </svg>
       );
+    case "heart":
+      return (
+        <svg {...common}>
+          <path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10Z" />
+        </svg>
+      );
+    case "mail":
+      return (
+        <svg {...common}>
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="m3 7 9 6 9-6" />
+        </svg>
+      );
     case "gear":
       return (
         <svg {...common}>
@@ -159,7 +175,7 @@ export function Sidebar() {
         </div>
       </Link>
 
-      <nav className="flex flex-1 flex-col gap-1">
+      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto pr-0.5">
         {NAV.map((item) => {
           const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           return (

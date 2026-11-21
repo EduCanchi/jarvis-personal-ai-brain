@@ -84,6 +84,7 @@ export default function AsistentePage() {
   const silenceSinceRef = useRef(0);
   const gotSpeechRef = useRef(false);
   const restartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const stopRequestedRef = useRef(false);
 
   const setEstadoBoth = (value: Estado) => {
@@ -196,6 +197,9 @@ export default function AsistentePage() {
   const ask = useCallback(
     async (question: string, origen: "texto" | "voz") => {
       if (!question.trim()) return;
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
       setMensajes((prev) => [
         ...prev,
         { id: `tmp-${Date.now()}`, role: "user", content: question, created_at: new Date().toISOString() },
@@ -207,6 +211,7 @@ export default function AsistentePage() {
         const result = await api<any>("/api/assistant", {
           method: "POST",
           body: JSON.stringify({ question, conversation_id: conversationRef.current, origin: origen }),
+          signal: controller.signal,
         });
         conversationRef.current = result.conversation_id;
         setConversationId(result.conversation_id);
@@ -230,6 +235,10 @@ export default function AsistentePage() {
           }, 400);
         }
       } catch (err: any) {
+        if (err?.name === "AbortError") {
+          setEstadoBoth("inactivo");
+          return;
+        }
         setMensajes((prev) => [
           ...prev,
           { id: `err-${Date.now()}`, role: "assistant", content: `⚠️ ${err.message}`, created_at: new Date().toISOString() },
@@ -375,7 +384,7 @@ export default function AsistentePage() {
             if (!silenceSinceRef.current) silenceSinceRef.current = now;
             const silenceMs = now - silenceSinceRef.current;
             const speechMs = now - speechStartRef.current;
-            if (silenceMs > (auto ? 1100 : 1400) && speechMs > 400) {
+            if (silenceMs > (auto ? Number((voice as any)?.silencio_ms ?? 1100) : 1400) && speechMs > 400) {
               stopListening(true);
               return;
             }
@@ -410,6 +419,7 @@ export default function AsistentePage() {
   };
 
   const interrupt = () => {
+    abortRef.current?.abort();
     speakingRef.current = false;
     audioRef.current?.pause();
     audioRef.current = null;
@@ -773,9 +783,9 @@ export default function AsistentePage() {
             >
               Enviar
             </button>
-            {estado === "hablando" && (
+            {(estado === "hablando" || estado === "pensando") && (
               <button className="btn-ghost h-[44px] px-3 text-xs" onClick={interrupt}>
-                Interrumpir
+                Detener
               </button>
             )}
           </div>
