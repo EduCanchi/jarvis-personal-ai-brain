@@ -1,95 +1,172 @@
 import { spawn, ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import { dataDir } from "../paths";
 import { getSetting, logEvent } from "../db";
 import { redact } from "../secrets";
 import { transcribeParakeet } from "./engines";
 
-const WHISPER_PORT = 8099;
 const IDLE_MS = 10 * 60 * 1000;
+const PORTS = { conversacion: 8099, preciso: 8097 } as const;
+export type SttModo = keyof typeof PORTS;
 
-interface WhisperState {
+interface Manager {
+  port: number;
   proc: ChildProcess | null;
   starting: Promise<void> | null;
   lastUsed: number;
-  idleTimer: NodeJS.Timeout | null;
+  timer: NodeJS.Timeout | null;
   lastError: string | null;
+  signature: string;
 }
 
-const globalForVoice = globalThis as unknown as { __paibWhisper?: WhisperState };
+const globalForVoice = globalThis as unknown as { __paibWhisper?: Record<string, Manager> };
 
-function state(): WhisperState {
-  if (!globalForVoice.__paibWhisper) {
-    globalForVoice.__paibWhisper = { proc: null, starting: null, lastUsed: 0, idleTimer: null, lastError: null };
-  }
+function managers(): Record<string, Manager> {
+  if (!globalForVoice.__paibWhisper) globalForVoice.__paibWhisper = {};
   return globalForVoice.__paibWhisper;
 }
 
-export function modelPath(): string {
-  const configured = getSetting("modelo_stt_ruta", "");
-  if (configured && fs.existsSync(configured)) return configured;
-  return path.join(dataDir(), "models", "ggml-small.bin");
+function manager(modo: SttModo): Manager {
+  const key = modo;
+  const store = managers();
+  if (!store[key]) {
+    store[key] = {
+      port: PORTS[modo],
+      proc: null,
+      starting: null,
+      lastUsed: 0,
+      timer: null,
+      lastError: null,
+      signature: "",
+    };
+  }
+  return store[key];
+}
+
+function modelExists(file: string): boolean {
+  return Boolean(file) && fs.existsSync(file);
+}
+
+export function modelsDir(): string {
+  return path.join(dataDir(), "models");
+}
+
+export function sttPrompt(): string {
+  return (
+    getSetting(
+      "stt_prompt",
+      "Conversación en español con Edu Canchi. Nombres frecuentes: Laura Méndez, Guatemala, proyecto Aurora, comité financiero.",
+    ) || ""
+  ).slice(0, 400);
+}
+
+/** Modelo rápido: prioriza latencia (small). */
+export function fastModel(): string {
+  const explicit = getSetting("stt_modelo_rapido", "");
+  if (modelExists(explicit)) return explicit;
+  const small = path.join(modelsDir(), "ggml-small.bin");
+  return small;
+}
+
+/** Modelo preciso: el configurado por el usuario (large-turbo/medium) o medium si existe. */
+export function accurateModel(): string {
+  const explicit = getSetting("modelo_stt_ruta", "");
+  if (modelExists(explicit)) return explicit;
+  const medium = path.join(modelsDir(), "ggml-medium.bin");
+  if (modelExists(medium)) return medium;
+  const large = path.join(modelsDir(), "ggml-large-v3-turbo.bin");
+  if (modelExists(large)) return large;
+  return fastModel();
+}
+
+export function modelPath(modo: SttModo = "conversacion"): string {
+  return modo === "preciso" ? accurateModel() : fastModel();
+}
+
+function signature(modo: SttModo): string {
+  return `${modelPath(modo)}|${sttPrompt()}`;
 }
 
 export function whisperAvailable(): { ok: boolean; detalle: string; modelo: string; binario: string } {
   const binario = "/opt/homebrew/bin/whisper-server";
-  const modelo = modelPath();
+  const modelo = fastModel();
   if (!fs.existsSync(binario)) return { ok: false, detalle: "whisper-server no instalado (brew install whisper-cpp)", modelo, binario };
-  if (!fs.existsSync(modelo)) return { ok: false, detalle: "Falta el modelo ggml (.bin)", modelo, binario };
+  if (!modelExists(modelo)) return { ok: false, detalle: "Falta el modelo ggml (.bin)", modelo, binario };
   return { ok: true, detalle: "Listo", modelo, binario };
 }
 
-async function healthy(): Promise<boolean> {
+async function healthy(port: number): Promise<boolean> {
   try {
-    const res = await fetch(`http://127.0.0.1:${WHISPER_PORT}/`, { signal: AbortSignal.timeout(1200) });
+    const res = await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(1200) });
     return res.ok;
   } catch {
     return false;
   }
 }
 
-async function ensureServer(): Promise<void> {
-  const s = state();
-  if (await healthy()) {
-    s.lastUsed = Date.now();
-    scheduleIdleStop();
-    return;
+function scheduleIdleStop(m: Manager) {
+  if (m.timer) clearTimeout(m.timer);
+  m.timer = setTimeout(() => {
+    if (Date.now() - m.lastUsed >= IDLE_MS && m.proc) {
+      logEvent("info", "voz", `whisper-server :${m.port} detenido por inactividad`);
+      m.proc.kill();
+      m.proc = null;
+    }
+  }, IDLE_MS + 5000);
+  m.timer.unref?.();
+}
+
+async function ensureServer(modo: SttModo): Promise<Manager> {
+  const m = manager(modo);
+  if (await healthy(m.port)) {
+    if (m.signature && m.signature !== signature(modo)) {
+      logEvent("info", "voz", "Reiniciando whisper para aplicar modelo/prompt");
+      m.proc?.kill();
+      m.proc = null;
+    } else {
+      m.lastUsed = Date.now();
+      scheduleIdleStop(m);
+      return m;
+    }
   }
-  if (s.starting) return s.starting;
+  if (m.starting) {
+    await m.starting;
+    return m;
+  }
 
-  const info = whisperAvailable();
-  if (!info.ok) throw new Error(info.detalle);
+  const modelo = modelPath(modo);
+  if (!modelExists(modelo)) throw new Error(`Falta el modelo de reconocimiento: ${path.basename(modelo)}`);
+  const binario = "/opt/homebrew/bin/whisper-server";
+  if (!fs.existsSync(binario)) throw new Error("whisper-server no instalado");
 
-  s.starting = (async () => {
-    s.lastError = null;
-    const proc = spawn(
-      info.binario,
-      [
-        "-m",
-        info.modelo,
-        "-l",
-        "es",
-        "-nt",
-        "--host",
-        "127.0.0.1",
-        "--port",
-        String(WHISPER_PORT),
-        "--convert",
-        "--threads",
-        "4",
-      ],
-      { stdio: ["ignore", "ignore", "pipe"] },
-    );
-    s.proc = proc;
+  m.starting = (async () => {
+    m.lastError = null;
+    const args = [
+      "-m",
+      modelo,
+      "-l",
+      "es",
+      "-nt",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      String(m.port),
+      "--convert",
+      "--threads",
+      "8",
+      ...(sttPrompt() ? ["--prompt", sttPrompt()] : []),
+    ];
+    const proc = spawn(binario, args, { stdio: ["ignore", "ignore", "pipe"] });
+    m.proc = proc;
+    m.signature = signature(modo);
     proc.stderr?.on("data", (chunk: Buffer) => {
       const text = chunk.toString();
-      if (/error|failed/i.test(text)) s.lastError = redact(text.slice(0, 400));
+      if (/error|failed/i.test(text)) m.lastError = redact(text.slice(0, 400));
     });
     proc.on("exit", () => {
-      s.proc = null;
-      s.starting = null;
+      m.proc = null;
+      m.starting = null;
     });
     const cleanup = () => {
       try {
@@ -103,58 +180,49 @@ async function ensureServer(): Promise<void> {
     process.once("SIGINT", cleanup);
 
     for (let i = 0; i < 120; i++) {
-      if (await healthy()) return;
-      if (!s.proc) break;
+      if (await healthy(m.port)) return;
+      if (!m.proc) break;
       await new Promise((r) => setTimeout(r, 250));
     }
-    throw new Error(s.lastError ?? "whisper-server no arrancó a tiempo");
+    throw new Error(m.lastError ?? "whisper-server no arrancó a tiempo");
   })();
 
   try {
-    await s.starting;
-    s.lastUsed = Date.now();
-    scheduleIdleStop();
-    logEvent("info", "voz", "whisper-server iniciado");
+    await m.starting;
+    m.lastUsed = Date.now();
+    scheduleIdleStop(m);
+    logEvent("info", "voz", `whisper-server :${m.port} iniciado (${path.basename(modelo)})`);
+    return m;
   } finally {
-    s.starting = null;
+    m.starting = null;
   }
-}
-
-function scheduleIdleStop() {
-  const s = state();
-  if (s.idleTimer) clearTimeout(s.idleTimer);
-  s.idleTimer = setTimeout(() => {
-    if (Date.now() - s.lastUsed >= IDLE_MS && s.proc) {
-      logEvent("info", "voz", "whisper-server detenido por inactividad");
-      s.proc.kill();
-      s.proc = null;
-    }
-  }, IDLE_MS + 5000);
-  s.idleTimer.unref?.();
 }
 
 export interface Transcription {
   text: string;
   ms: number;
   modelo: string;
+  modo: SttModo | "parakeet";
 }
 
-/** Transcribe audio (webm/ogg/wav/mp3/m4a) con whisper.cpp en local. */
-export async function transcribe(input: Buffer, filename: string): Promise<Transcription> {
+/** Transcribe audio local (webm/ogg/wav/mp3/m4a). */
+export async function transcribe(input: Buffer, filename: string, modo: SttModo = "conversacion"): Promise<Transcription> {
   const started = Date.now();
+  if (modo === "conversacion" && getSetting("stt_modo_conversacion", "conversacion") === "preciso") {
+    modo = "preciso";
+  }
   const provider = getSetting("motor_stt", "whisper");
 
   if (provider === "parakeet") {
     const cloud = await transcribeParakeet(input, "es-US");
     if (cloud && cloud.text) {
-      return { text: cloud.text, ms: Date.now() - started, modelo: "parakeet-1.1b-rnnt-multilingual" };
+      return { text: cloud.text, ms: Date.now() - started, modelo: "parakeet-1.1b-rnnt-multilingual", modo: "parakeet" };
     }
   }
 
-  await ensureServer();
-  const s = state();
-  s.lastUsed = Date.now();
-  scheduleIdleStop();
+  const m = await ensureServer(modo);
+  m.lastUsed = Date.now();
+  scheduleIdleStop(m);
 
   const form = new FormData();
   form.append("file", new Blob([new Uint8Array(input)]), filename || "audio.webm");
@@ -162,10 +230,10 @@ export async function transcribe(input: Buffer, filename: string): Promise<Trans
   form.append("response_format", "json");
   form.append("temperature", "0.0");
 
-  const res = await fetch(`http://127.0.0.1:${WHISPER_PORT}/inference`, {
+  const res = await fetch(`http://127.0.0.1:${m.port}/inference`, {
     method: "POST",
     body: form,
-    signal: AbortSignal.timeout(120_000),
+    signal: AbortSignal.timeout(180_000),
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
@@ -176,28 +244,35 @@ export async function transcribe(input: Buffer, filename: string): Promise<Trans
     .replace(/\[BLANK_AUDIO\]|\(.*?silencio.*?\)/gi, "")
     .replace(/\s+/g, " ")
     .trim();
-  return { text, ms: Date.now() - started, modelo: path.basename(modelPath()) };
+  return { text, ms: Date.now() - started, modelo: path.basename(modelPath(modo)), modo };
 }
 
 export function stopWhisper() {
-  const s = state();
-  if (s.proc) {
-    s.proc.kill();
-    s.proc = null;
+  for (const m of Object.values(managers())) {
+    if (m.proc) {
+      m.proc.kill();
+      m.proc = null;
+    }
   }
 }
 
 export function whisperStatus() {
-  const s = state();
   const info = whisperAvailable();
+  const conv = manager("conversacion");
+  const prec = manager("preciso");
   return {
     disponible: info.ok,
     detalle: info.detalle,
-    modelo: path.basename(info.modelo),
-    cargado: Boolean(s.proc),
-    puerto: WHISPER_PORT,
-    ultimo_error: s.lastError,
-    memoria_estimada_mb: s.proc ? 700 : 0,
-    plataforma: `${os.platform()} ${os.arch()}`,
+    modelo: path.basename(fastModel()),
+    modelo_conversacion: path.basename(fastModel()),
+    modelo_preciso: path.basename(accurateModel()),
+    calidad: getSetting("stt_calidad", "conversacion"),
+    prompt: sttPrompt(),
+    cargado: Boolean(conv.proc || prec.proc),
+    cargado_conversacion: Boolean(conv.proc),
+    cargado_preciso: Boolean(prec.proc),
+    puerto: conv.port,
+    ultimo_error: conv.lastError,
+    memoria_estimada_mb: (conv.proc ? 700 : 0) + (prec.proc ? 1600 : 0),
   };
 }

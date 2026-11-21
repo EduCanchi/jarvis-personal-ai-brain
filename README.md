@@ -138,6 +138,11 @@ Conversación por voz y texto con herramientas: crea presentaciones, hojas de c�
 PDF y diagramas; consulta tu memoria, busca archivos, lee la agenda y envía notificaciones.
 Push-to-talk, manos libres con palabra de activación, interrupción y respuestas habladas.
 
+### Conversación
+Sesión de voz con una sola activación («Jarvis»), turnos continuos, interrupción hablando, cierre por
+frase o inactividad y dos modos de reconocimiento (conversación rápida / dictado preciso). Detalle y
+pruebas: [`docs/CONVERSACION.md`](docs/CONVERSACION.md).
+
 ### Memoria personal, salud y correo
 Memorias diferenciadas (episódica, semántica, preferencias, procedimental, documental y salud) con
 origen, confianza y cifrado para lo sensible. Módulo de salud con consentimiento explícito,

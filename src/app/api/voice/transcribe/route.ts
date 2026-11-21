@@ -24,6 +24,9 @@ export async function GET() {
       volumen: Number(getSetting("voz_volumen", "0.9")) || 0.9,
       palabra_activacion: getSetting("palabra_activacion", "jarvis"),
       manos_libres: getSetting("modo_manos_libres", "false") === "true",
+      silencio_ms: Number(getSetting("silencio_ms", "1600")) || 1600,
+      sesion_timeout_s: Number(getSetting("sesion_timeout_s", "60")) || 60,
+      frases_cierre: getSetting("frases_cierre", "termina,terminar,adiós,hasta luego,eso es todo,cierra sesión"),
       auto_tts: getSetting("auto_tts", "true") === "true",
       motor_voz_es: getSetting("motor_voz_es", "kokoro"),
       voz_es: getSetting("voz_es", "em_alex"),
@@ -45,7 +48,8 @@ export async function POST(req: Request) {
     if (file.size === 0) return fail("El audio está vacío", 400);
     if (file.size > MAX_AUDIO) return fail("El audio supera 25 MB", 413);
     const buffer = Buffer.from(await file.arrayBuffer());
-    const result = await transcribe(buffer, file.name || "audio.webm");
+    const modo = form.get("modo") === "preciso" ? "preciso" : "conversacion";
+    const result = await transcribe(buffer, file.name || "audio.webm", modo);
     return ok(result);
   } catch (err) {
     return handleError(err);

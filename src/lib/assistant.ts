@@ -70,7 +70,7 @@ function ensureConversation(conversationId: string | null, question: string): st
   return id;
 }
 
-function history(conversationId: string, limit = 6) {
+function history(conversationId: string, limit = 12) {
   const rows = db()
     .prepare("SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT ?")
     .all(conversationId, limit) as Row[];
@@ -182,13 +182,20 @@ export async function askJarvis(input: {
       break;
     }
 
-    if (!parsed || parsed.tipo !== "herramienta") {
+    const pareceHerramienta =
+      parsed &&
+      typeof parsed === "object" &&
+      (parsed.tipo === "herramienta" ||
+        typeof parsed.herramienta === "string" ||
+        (typeof parsed.tipo === "string" && Boolean(getTool(parsed.tipo)) && parsed.argumentos));
+
+    if (!pareceHerramienta) {
       answer = String(parsed?.texto ?? result.content).trim();
       break;
     }
 
-    const toolName = String(parsed.herramienta ?? "");
-    const args = (parsed.argumentos ?? {}) as Record<string, any>;
+    const toolName = String(parsed.herramienta ?? (getTool(parsed.tipo) ? parsed.tipo : ""));
+    const args = (parsed.argumentos ?? parsed.args ?? {}) as Record<string, any>;
     const tool = getTool(toolName);
     if (!tool) {
       messages.push({ role: "assistant", content: result.content });

@@ -3,8 +3,31 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, formatDate, useApi } from "@/lib/client";
 import { Spinner, Toast } from "@/components/ui";
+import { normalizeText, detectWake, stripWake, isClosing, routeUtterance } from "@/lib/voice/session";
 
 type Estado = "inactivo" | "escuchando" | "transcribiendo" | "pensando" | "hablando";
+
+const CIERRE_DEFAULT = [
+  "termina",
+  "terminar",
+  "adios",
+  "adiós",
+  "hasta luego",
+  "eso es todo",
+  "cierra sesión",
+  "cierra sesion",
+  "descansa",
+];
+
+/** Proporción de tokens del transcript presentes en el texto hablado (eco del propio TTS). */
+function echoOverlap(transcript: string, spoken: string): number {
+  const sa = new Set(normalizeText(transcript).split(" ").filter(Boolean));
+  const sb = new Set(normalizeText(spoken).split(" ").filter(Boolean));
+  if (!sa.size || !sb.size) return 0;
+  let n = 0;
+  for (const t of sa) if (sb.has(t)) n++;
+  return n / sa.size;
+}
 
 interface Citation {
   n: number;
@@ -46,6 +69,9 @@ interface VoiceInfo {
   palabra_activacion: string;
   manos_libres: boolean;
   auto_tts: boolean;
+  silencio_ms?: number;
+  sesion_timeout_s?: number;
+  frases_cierre?: string;
 }
 
 export default function AsistentePage() {
@@ -66,6 +92,7 @@ export default function AsistentePage() {
   const [metricas, setMetricas] = useState<{ stt?: number; total?: number; primera_voz?: number }>({});
   const [ignorado, setIgnorado] = useState<string | null>(null);
   const [textoManual, setTextoManual] = useState("");
+  const [sesionActiva, setSesionActiva] = useState(false);
 
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -86,6 +113,19 @@ export default function AsistentePage() {
   const restartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const stopRequestedRef = useRef(false);
+  const sesionRef = useRef(false);
+  const sesionDeadlineRef = useRef(0);
+  const monitorRecRef = useRef<MediaRecorder | null>(null);
+  const monitorChunksRef = useRef<Blob[]>([]);
+  const monitorRafRef = useRef<number | null>(null);
+  const monitorBusyRef = useRef(false);
+  const hablandoTextoRef = useRef("");
+  const pausedAudioRef = useRef<HTMLAudioElement | null>(null);
+  const bargeFramesRef = useRef(0);
+  const timeoutSRef = useRef(60);
+  const cierreRef = useRef<string[]>(CIERRE_DEFAULT.map(normalizeText));
+  const silencioMsRef = useRef(1600);
+  const lastActivityRef = useRef(0);
 
   const setEstadoBoth = (value: Estado) => {
     estadoRef.current = value;
@@ -111,7 +151,28 @@ export default function AsistentePage() {
     manosLibresRef.current = voice.manos_libres;
     autoTtsRef.current = voice.auto_tts;
     palabraRef.current = voice.palabra_activacion;
+    timeoutSRef.current = Number(voice.sesion_timeout_s ?? 60) || 60;
+    silencioMsRef.current = Number(voice.silencio_ms ?? 1600) || 1600;
+    const cierre = String(voice.frases_cierre ?? "")
+      .split(",")
+      .map(normalizeText)
+      .filter(Boolean);
+    cierreRef.current = cierre.length ? cierre : CIERRE_DEFAULT.map(normalizeText);
   }, [voice]);
+
+  useEffect(() => {
+    if (!sesionActiva) return;
+    const timer = setInterval(() => {
+      if (!sesionRef.current) return;
+      const last = lastActivityRef.current;
+      if (!last) return;
+      if (performance.now() - last > timeoutSRef.current * 1000) {
+        cerrarSesionPorInactividad();
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sesionActiva]);
 
   useEffect(() => {
     return () => {
@@ -135,9 +196,130 @@ export default function AsistentePage() {
     streamRef.current = null;
     audioRef.current?.pause();
     speakingRef.current = false;
+    void stopMonitor(false);
     if (restartTimer.current) clearTimeout(restartTimer.current);
     setNivel(0);
     setEstadoBoth("inactivo");
+  };
+
+  const stopMonitor = useCallback((grab: boolean): Promise<Blob | null> => {
+    return new Promise((resolve) => {
+      if (monitorRafRef.current) {
+        cancelAnimationFrame(monitorRafRef.current);
+        monitorRafRef.current = null;
+      }
+      const rec = monitorRecRef.current;
+      monitorRecRef.current = null;
+      if (!rec || rec.state !== "recording") {
+        monitorChunksRef.current = [];
+        resolve(null);
+        return;
+      }
+      rec.onstop = () => {
+        const blob = grab
+          ? new Blob(monitorChunksRef.current, { type: rec.mimeType || "audio/webm" })
+          : null;
+        monitorChunksRef.current = [];
+        resolve(blob);
+      };
+      rec.stop();
+    });
+  }, []);
+
+  const transcribeAudio = async (blob: Blob, modo: "conversacion" | "preciso" = "conversacion"): Promise<string> => {
+    const form = new FormData();
+    const ext = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";
+    form.append("audio", blob, `voz.${ext}`);
+    form.append("modo", modo);
+    const result = await api<{ text: string }>("/api/voice/transcribe", { method: "POST", body: form });
+    return (result.text ?? "").trim();
+  };
+
+  const resumePlayback = () => {
+    const audio = pausedAudioRef.current;
+    pausedAudioRef.current = null;
+    if (audio && speakingRef.current) {
+      void audio.play().catch(() => {});
+      if (estadoRef.current === "transcribiendo") setEstadoBoth("hablando");
+      startBargeMonitor();
+    } else {
+      speakingRef.current = false;
+    }
+  };
+
+  const handleBargeIn = async () => {
+    if (monitorBusyRef.current) return;
+    monitorBusyRef.current = true;
+    try {
+      const audio = audioRef.current;
+      audio?.pause();
+      pausedAudioRef.current = audio ?? null;
+      const blob = await stopMonitor(true);
+      if (!blob || blob.size < 1200) {
+        resumePlayback();
+        return;
+      }
+      setEstadoBoth("transcribiendo");
+      const text = await transcribeAudio(blob);
+      setEstadoBoth("hablando");
+      if (!text || echoOverlap(text, hablandoTextoRef.current) >= 0.6) {
+        resumePlayback();
+        return;
+      }
+      speakingRef.current = false;
+      pausedAudioRef.current = null;
+      monitorBusyRef.current = false;
+      await routeVoiceText(text);
+    } catch {
+      resumePlayback();
+    } finally {
+      monitorBusyRef.current = false;
+    }
+  };
+
+  const startBargeMonitor = () => {
+    const stream = streamRef.current;
+    const analyser = analyserRef.current;
+    if (!stream || !analyser || monitorRecRef.current || monitorBusyRef.current) return;
+    try {
+      const rec = new MediaRecorder(stream);
+      monitorChunksRef.current = [];
+      rec.ondataavailable = (e) => {
+        if (e.data.size > 0) monitorChunksRef.current.push(e.data);
+      };
+      monitorRecRef.current = rec;
+      rec.start(250);
+    } catch {
+      return;
+    }
+    bargeFramesRef.current = 0;
+    const started = performance.now();
+    const data = new Uint8Array(analyser.fftSize);
+    const tick = () => {
+      if (!speakingRef.current || monitorBusyRef.current) {
+        void stopMonitor(false);
+        return;
+      }
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) {
+        const v = (data[i] - 128) / 128;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / data.length);
+      const now = performance.now();
+      if (rms > 0.06 && now - started > 600) {
+        bargeFramesRef.current += 1;
+        if (bargeFramesRef.current >= 5) {
+          void handleBargeIn();
+          return;
+        }
+      } else {
+        bargeFramesRef.current = 0;
+      }
+      monitorRafRef.current = requestAnimationFrame(tick);
+    };
+    monitorRafRef.current = requestAnimationFrame(tick);
   };
 
   const speak = useCallback(
@@ -151,9 +333,11 @@ export default function AsistentePage() {
           method: "POST",
           body: JSON.stringify({ text, segments: true }),
         });
+        startBargeMonitor();
         let first = true;
         for (const segment of segments) {
           if (!speakingRef.current) break;
+          hablandoTextoRef.current = segment;
           const res = await fetch("/api/voice/speak", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -167,9 +351,24 @@ export default function AsistentePage() {
           audio.volume = volumen;
           audioRef.current = audio;
           await new Promise<void>((resolve) => {
-            audio.onended = () => resolve();
-            audio.onerror = () => resolve();
-            void audio.play().catch(() => resolve());
+            const guard = setInterval(() => {
+              if (!speakingRef.current) {
+                clearInterval(guard);
+                resolve();
+              }
+            }, 120);
+            audio.onended = () => {
+              clearInterval(guard);
+              resolve();
+            };
+            audio.onerror = () => {
+              clearInterval(guard);
+              resolve();
+            };
+            void audio.play().catch(() => {
+              clearInterval(guard);
+              resolve();
+            });
           });
           URL.revokeObjectURL(url);
           if (first) {
@@ -181,17 +380,19 @@ export default function AsistentePage() {
         notify(err.message, "error");
       } finally {
         speakingRef.current = false;
+        hablandoTextoRef.current = "";
+        void stopMonitor(false);
         if (estadoRef.current === "hablando") setEstadoBoth("inactivo");
-        if (manosLibresRef.current && !restartTimer.current) {
+        if ((manosLibresRef.current || sesionRef.current) && !restartTimer.current) {
           restartTimer.current = setTimeout(() => {
             restartTimer.current = null;
-            if (manosLibresRef.current && !speakingRef.current) void startListening(true);
+            if ((manosLibresRef.current || sesionRef.current) && !speakingRef.current) void startListening(true);
           }, 500);
         }
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [voz, velocidad, volumen],
+    [voz, velocidad, volumen, stopMonitor],
   );
 
   const ask = useCallback(
@@ -227,11 +428,12 @@ export default function AsistentePage() {
           },
         ]);
         setPending(result.pending ?? null);
+        lastActivityRef.current = performance.now();
         setEstadoBoth("inactivo");
         if (autoTtsRef.current && result.answer) void speak(result.answer);
-        else if (manosLibresRef.current) {
+        else if (manosLibresRef.current || sesionRef.current) {
           setTimeout(() => {
-            if (manosLibresRef.current && !speakingRef.current) void startListening(true);
+            if ((manosLibresRef.current || sesionRef.current) && !speakingRef.current) void startListening(true);
           }, 400);
         }
       } catch (err: any) {
@@ -262,47 +464,82 @@ export default function AsistentePage() {
     [],
   );
 
+  const cerrarSesion = (despedir: boolean) => {
+    sesionRef.current = false;
+    setSesionActiva(false);
+    sesionDeadlineRef.current = 0;
+    lastActivityRef.current = 0;
+    void stopMonitor(false);
+    if (despedir && autoTtsRef.current) {
+      void speak("Hasta luego.");
+    } else if (manosLibresRef.current) {
+      setTimeout(() => {
+        if (manosLibresRef.current && !speakingRef.current && estadoRef.current !== "escuchando") {
+          void startListening(true);
+        }
+      }, 300);
+    }
+  };
+
+  const cerrarSesionPorInactividad = () => {
+    sesionRef.current = false;
+    setSesionActiva(false);
+    sesionDeadlineRef.current = 0;
+    lastActivityRef.current = 0;
+    stopListening(false);
+    setTimeout(() => {
+      if (manosLibresRef.current && !speakingRef.current) void startListening(true);
+    }, 400);
+  };
+
+  const routeVoiceText = async (text: string) => {
+    const accion = routeUtterance({
+      texto: text,
+      sesionActiva: sesionRef.current,
+      manosLibres: manosLibresRef.current,
+      palabraActivacion: palabraRef.current,
+      frasesCierre: cierreRef.current,
+    });
+    const reanudar = () => {
+      if (manosLibresRef.current || sesionRef.current) void startListening(true);
+      else setEstadoBoth("inactivo");
+    };
+
+    if (accion.tipo === "ignorar") {
+      setIgnorado(text);
+      setTimeout(() => setIgnorado(null), 2500);
+      reanudar();
+      return;
+    }
+    if (accion.tipo === "cerrar") {
+      cerrarSesion(true);
+      return;
+    }
+    if (accion.tipo === "activar") {
+      sesionRef.current = true;
+      setSesionActiva(true);
+      lastActivityRef.current = performance.now();
+      if (accion.texto) {
+        setParcial(accion.texto);
+        await ask(accion.texto, "voz");
+      } else {
+        await speak("Te escucho.");
+      }
+      return;
+    }
+    lastActivityRef.current = performance.now();
+    setParcial(accion.texto);
+    await ask(accion.texto, "voz");
+  };
+
   const transcribeBlob = useCallback(
     async (blob: Blob) => {
       setEstadoBoth("transcribiendo");
       const t0 = performance.now();
       try {
-        const form = new FormData();
-        const ext = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";
-        form.append("audio", blob, `voz.${ext}`);
-        const result = await api<{ text: string; ms: number }>("/api/voice/transcribe", { method: "POST", body: form });
+        const text = await transcribeAudio(blob);
         setMetricas((m) => ({ ...m, stt: Math.round(performance.now() - t0) }));
-        const text = result.text.trim();
-        if (!text) {
-          setEstadoBoth("inactivo");
-          if (manosLibresRef.current) void startListening(true);
-          return;
-        }
-        const normalized = text.toLowerCase().replace(/[.,;:¡!¿?]/g, " ").replace(/\s+/g, " ").trim();
-        const wake = palabraRef.current.toLowerCase();
-        const tokens = normalized.split(" ").filter(Boolean);
-        const fuzzy = (a: string, b: string) => {
-          if (Math.abs(a.length - b.length) > 2) return false;
-          const dp = Array.from({ length: b.length + 1 }, (_, i) => [i]);
-          for (let j = 1; j <= a.length; j++) dp[0][j] = j;
-          for (let i = 1; i <= b.length; i++) {
-            for (let j = 1; j <= a.length; j++) {
-              dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + (a[j - 1] === b[i - 1] ? 0 : 1));
-            }
-          }
-          return dp[b.length][a.length] <= 2;
-        };
-        const wakeOk = normalized.includes(wake) || tokens.slice(0, 3).some((t) => fuzzy(t, wake));
-        if (manosLibresRef.current && !wakeOk) {
-          setIgnorado(text);
-          setTimeout(() => setIgnorado(null), 2500);
-          setEstadoBoth("inactivo");
-          void startListening(true);
-          return;
-        }
-        const clean = normalized.includes(wake) ? text.replace(new RegExp(wake, "i"), "").replace(/^[,.\s]+/, "").trim() || text : text;
-        setParcial(clean);
-        await ask(clean, "voz");
+        await routeVoiceText(text);
       } catch (err: any) {
         notify(err.message, "error");
         setEstadoBoth("inactivo");
@@ -318,7 +555,13 @@ export default function AsistentePage() {
       try {
         if (!streamRef.current) {
           streamRef.current = await navigator.mediaDevices.getUserMedia({
-            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+              channelCount: 1,
+              sampleRate: 48000,
+            },
           });
         }
         const stream = streamRef.current;
@@ -335,7 +578,9 @@ export default function AsistentePage() {
           : MediaRecorder.isTypeSupported("audio/mp4")
             ? "audio/mp4"
             : "";
-        const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+        const recorder = mime
+          ? new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 64000 })
+          : new MediaRecorder(stream);
         chunksRef.current = [];
         recorder.ondataavailable = (e) => {
           if (e.data.size > 0) chunksRef.current.push(e.data);
@@ -350,7 +595,7 @@ export default function AsistentePage() {
           }
           if (blob.size < 1200) {
             setEstadoBoth("inactivo");
-            if (manosLibresRef.current) void startListening(true);
+            if (manosLibresRef.current || sesionRef.current) void startListening(true);
             return;
           }
           void transcribeBlob(blob);
@@ -378,13 +623,14 @@ export default function AsistentePage() {
             if (!gotSpeechRef.current) {
               gotSpeechRef.current = true;
               speechStartRef.current = now;
+              lastActivityRef.current = performance.now();
             }
             silenceSinceRef.current = 0;
           } else if (gotSpeechRef.current) {
             if (!silenceSinceRef.current) silenceSinceRef.current = now;
             const silenceMs = now - silenceSinceRef.current;
             const speechMs = now - speechStartRef.current;
-            if (silenceMs > (auto ? Number((voice as any)?.silencio_ms ?? 1100) : 1400) && speechMs > 400) {
+            if (silenceMs > (auto ? silencioMsRef.current : 1400) && speechMs > 400) {
               stopListening(true);
               return;
             }
@@ -421,10 +667,11 @@ export default function AsistentePage() {
   const interrupt = () => {
     abortRef.current?.abort();
     speakingRef.current = false;
+    void stopMonitor(false);
     audioRef.current?.pause();
     audioRef.current = null;
     setEstadoBoth("inactivo");
-    if (manosLibresRef.current) void startListening(true);
+    if (manosLibresRef.current || sesionRef.current) void startListening(true);
   };
 
   const confirmPending = async () => {
@@ -489,7 +736,7 @@ export default function AsistentePage() {
             <span className={`node-dot ${voice?.disponible ? "bg-neon-500" : "bg-amber-400"}`} />
           </h1>
           <p className="mt-1 text-sm text-mist-400">
-            Habla o escribe. Voz local (whisper.cpp) y respuestas con la voz de macOS.
+            Di «{palabra}» una vez para abrir la conversación; después habla con naturalidad.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -547,12 +794,22 @@ export default function AsistentePage() {
           </button>
 
           <div className="mt-4 h-6 text-sm text-mist-300">
-            {estado === "inactivo" && "Pulsa el micrófono para hablar"}
-            {estado === "escuchando" && "Escuchando… habla con naturalidad"}
+            {estado === "inactivo" && !sesionActiva && "Pulsa el micrófono para hablar"}
+            {estado === "inactivo" && sesionActiva && "Sesión activa"}
+            {estado === "escuchando" && (sesionActiva ? "Conversando… habla cuando quieras" : "Escuchando… habla con naturalidad")}
             {estado === "transcribiendo" && <span className="flex items-center gap-2"><Spinner /> Transcribiendo</span>}
             {estado === "pensando" && <span className="flex items-center gap-2"><Spinner /> Pensando</span>}
-            {estado === "hablando" && "Respondiendo… pulsa para interrumpir"}
+            {estado === "hablando" && "Respondiendo… habla para interrumpir"}
           </div>
+
+          {sesionActiva && (
+            <div className="mt-2 rounded-lg bg-neon-500/10 px-2 py-1 text-[10px] text-neon-300">
+              Sesión abierta — no repitas «{palabra}». Para cerrar: «termina» o {timeoutSRef.current} s de silencio.
+              <button className="ml-2 underline hover:text-white" onClick={() => cerrarSesion(false)}>
+                cerrar ahora
+              </button>
+            </div>
+          )}
 
           {ignorado && <div className="mt-2 rounded-lg bg-white/5 px-2 py-1 text-[10px] text-mist-400">Ignorado: “{ignorado}”</div>}
 
@@ -567,7 +824,11 @@ export default function AsistentePage() {
                   manosLibresRef.current = e.target.checked;
                   void saveSetting({ modo_manos_libres: String(e.target.checked) });
                   if (e.target.checked) void startListening(true);
-                  else stopListening(false);
+                  else {
+                    sesionRef.current = false;
+                    setSesionActiva(false);
+                    stopListening(false);
+                  }
                 }}
               />
               Manos libres
@@ -637,6 +898,22 @@ export default function AsistentePage() {
                   void saveSetting({ palabra_activacion: palabra || "jarvis" });
                 }}
               />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-16 text-mist-400">Cierre auto</span>
+              <input
+                type="number"
+                min={15}
+                max={600}
+                className="input w-20 py-1.5 text-xs"
+                defaultValue={voice?.sesion_timeout_s ?? 60}
+                onBlur={(e) => {
+                  const v = Math.max(15, Math.min(600, Number(e.target.value) || 60));
+                  timeoutSRef.current = v;
+                  void saveSetting({ sesion_timeout_s: String(v) });
+                }}
+              />
+              <span className="text-mist-400">s de silencio</span>
             </div>
           </div>
 

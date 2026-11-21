@@ -437,6 +437,31 @@ export default function ConfiguracionPage() {
             <p className="mt-1 text-[10px] text-mist-400">
               Parakeet añade puntuación pero confundió “mañana” en las pruebas; whisper fue más preciso.
             </p>
+            <div className="mt-3 rounded-xl border border-white/6 bg-white/[0.02] p-3 text-[11px] text-mist-400">
+              <div>
+                Conversación: <span className="font-mono text-mist-300">{voz?.stt?.modelo_conversacion ?? "ggml-small.bin"}</span> (2–3 s)
+              </div>
+              <div>
+                Dictado/preciso: <span className="font-mono text-mist-300">{voz?.stt?.modelo_preciso ?? "—"}</span> (6–8 s)
+              </div>
+            </div>
+            <label className="mt-3 flex items-start gap-2 text-[11px] text-mist-300">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-3.5 w-3.5 accent-[#35e0c4]"
+                checked={local.stt_modo_conversacion === "preciso"}
+                onChange={(e) => void saveSettings({ stt_modo_conversacion: e.target.checked ? "preciso" : "conversacion" })}
+              />
+              Usar el modelo preciso también al conversar (más lento, ~6–8 s por frase)
+            </label>
+            <label className="label mt-3">Contexto para el reconocimiento</label>
+            <input
+              className="input text-xs"
+              value={local.stt_prompt ?? ""}
+              placeholder="Nombres y términos frecuentes"
+              onChange={(e) => setLocal({ ...local, stt_prompt: e.target.value })}
+              onBlur={(e) => void saveSettings({ stt_prompt: e.target.value })}
+            />
           </div>
           <div className="sm:col-span-2">
             <label className="label">Modelo para conversación por voz</label>
